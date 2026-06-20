@@ -77,6 +77,12 @@ function CanvasPanelInner({
   modelName,
   onNodesChange: notifyNodes,
   onEdgesChange: notifyEdges,
+  onNodesDelete,
+  onEdgesDelete,
+  onNodeContextMenu,
+  onNodeClick,
+  onPaneClick,
+  onSelectionChange,
 }) {
   const { screenToFlowPosition, fitView } = useReactFlow();
 
@@ -180,11 +186,17 @@ function CanvasPanelInner({
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodesDelete={onNodesDelete}
+        onEdgesDelete={onEdgesDelete}
         onConnect={onConnect}
         onDragOver={onDragOver}
         onDrop={onDrop}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        onNodeClick={onNodeClick}
+        onNodeContextMenu={onNodeContextMenu}
+        onPaneClick={onPaneClick}
+        onSelectionChange={onSelectionChange}
         fitView
         fitViewOptions={{ padding: 0.15, maxZoom: 1.2 }}
         minZoom={0.2}

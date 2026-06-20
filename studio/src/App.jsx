@@ -21,12 +21,12 @@
  * Mode flag: VITE_DEMO_MODE=true in .env.local
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
-import PalettePanel  from './components/PalettePanel';
-import CanvasPanel   from './components/CanvasPanel';
+import PalettePanel from './components/PalettePanel';
+import CanvasPanel from './components/CanvasPanel';
 import NotebookPanel from './components/NotebookPanel';
 import AnalysisPanel from './components/AnalysisPanel';
-import { useTracer }  from './hooks/useTracer';
-import { useCodeGen } from './hooks/useCodeGen';
+import { useTracer } from './hooks/useTracer';
+import { useCodeGen, generateCode } from './hooks/useCodeGen';
 import {
   STATIC_GRAPH_CLEAN,
   STATIC_GRAPH_MISMATCH,
@@ -38,7 +38,7 @@ import {
 const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
 
 // ─────────────────────────────────────────────────────────────────────────────
-
+import { TEMPLATES } from './data/templates';
 export default function App() {
 
   // ── Demo mode state ─────────────────────────────────────────────────────────
@@ -73,7 +73,9 @@ export default function App() {
   // ── Notebook code state ──────────────────────────────────────────────────────
   // liveCode is a REF, not state — user keystrokes must NEVER trigger a re-render.
   // Only codeSource transitions (user↔canvas) cause re-renders.
-  const liveCodeRef                 = useRef(DEMO_CODE_CLEAN);
+  const [selectedTemplate, setSelectedTemplate] = useState('tissue_llm');
+  const [inputShape, setInputShape] = useState(TEMPLATES.tissue_llm.inputShape);
+  const liveCodeRef = useRef(TEMPLATES.tissue_llm.code);
   const [codeSource, setCodeSource] = useState('user'); // 'user' | 'canvas'
 
   // In DEMO_MODE show the pre-written demo code matching the current graph state
@@ -84,6 +86,7 @@ export default function App() {
     codeSource === 'canvas' ? canvasNodes : [],
     codeSource === 'canvas' ? canvasEdges : [],
   );
+
 
   // What Monaco shows:
   //   DEMO_MODE  → pre-built demo code (switches with Ctrl+Shift+E)
@@ -96,8 +99,18 @@ export default function App() {
       : liveCodeRef.current;
 
   // ── Analysis panel problems ───────────────────────────────────────────────────
-  const [traceError, setTraceError]     = useState(null);
+  const [traceError, setTraceError] = useState(null);
   const [liveProblems, setLiveProblems] = useState([]);
+
+  // ── OUTPUT / TERMINAL / DEBUG log state ────────────────────────────────────
+  const [outputLog,   setOutputLog]   = useState([]);  // { text, isError, ts }
+  const [terminalLog, setTerminalLog] = useState([]);  // { text, ts }
+  const [selectedNode, setSelectedNode] = useState(null); // node object | null
+
+  // Tracing indicator: true while the backend is processing a WS request.
+  // Displayed as a pulsing "Tracing…" badge in the title bar.
+  const [isTracing, setIsTracing] = useState(false);
+  const tracingTimerRef = useRef(null); // safety reset after 5s to avoid stuck badge
 
   // In DEMO_MODE mismatch state → inject the pre-built hardcoded message
   const demoProblems = mismatching
@@ -107,10 +120,10 @@ export default function App() {
   const allProblems = DEMO_MODE
     ? demoProblems
     : [
-        ...(traceError ? [{ id: 'trace-error', severity: 'error', message: traceError }] : []),
-        ...liveProblems,
-        ...codeGenProblems,
-      ];
+      ...(traceError ? [{ id: 'trace-error', severity: 'error', message: traceError }] : []),
+      ...liveProblems,
+      ...codeGenProblems,
+    ];
 
   // ── Ctrl+Shift+E / Cmd+Shift+E toggle ────────────────────────────────────────
   // Demo-safety: silently toggle between clean and mismatch states.
@@ -145,9 +158,9 @@ export default function App() {
     // Surface backend mismatches in the analysis panel
     if (graph.mismatches && graph.mismatches.length > 0) {
       setLiveProblems(graph.mismatches.map((m) => ({
-        id:       m.edge_id,
+        id: m.edge_id,
         severity: 'error',
-        message:  m.message,
+        message: m.message,
       })));
     } else {
       setLiveProblems([]);
@@ -156,46 +169,275 @@ export default function App() {
     // Extract model class name for the canvas badge
     const firstCall = graph.nodes.find((n) => n.data?.op === 'call_module');
     setModelName(graph.model_name ?? firstCall?.data?.label ?? 'Live model');
+    setIsTracing(false);
+    clearTimeout(tracingTimerRef.current);
   }, []);
 
   const handleTraceError = useCallback((msg) => {
     setTraceError(msg);
+    setIsTracing(false);
+    clearTimeout(tracingTimerRef.current);
     // Don't clear canvas — hold last valid state
   }, []);
 
+  // Must be a named const at top level — Rules of Hooks forbids inline useCallback
+  // inside a regular function call's argument list (useTracer is not a hook receiver).
+  const handleLog = useCallback(({ type, text, isError = false }) => {
+    const ts = new Date().toTimeString().slice(0, 8); // HH:MM:SS
+    const entry = { text: `[${ts}] ${text}`, isError, id: Date.now() + Math.random() };
+    if (type === 'output')   setOutputLog((l) => [entry, ...l].slice(0, 200));
+    if (type === 'terminal') setTerminalLog((l) => [entry, ...l].slice(0, 400));
+  }, []);
+
   const { sendCode, wsStatus } = useTracer(
-    DEMO_MODE ? () => {} : handleGraph,
-    DEMO_MODE ? () => {} : handleTraceError,
+    DEMO_MODE ? () => { } : handleGraph,
+    DEMO_MODE ? () => { } : handleTraceError,
+    handleLog,
   );
+
+  // ── Monaco node-click highlight ───────────────────────────────────────────────
+  const editorRef = useRef(null);
+  const decorationIdsRef = useRef([]);
+
+  // ── Undo history stack ───────────────────────────────────────────────────────
+  // Stores { nodes, edges, code } snapshots BEFORE each destructive action.
+  // Max 50 entries. Newest entry is at index 0.
+  const historyRef          = useRef([]);
+  const codeHistoryTimerRef = useRef(null); // debounce for text-change pushes
+  const MAX_HISTORY = 50;
+
+  const pushHistory = useCallback((nodes, edges, code) => {
+    historyRef.current = [
+      { nodes, edges, code },
+      ...historyRef.current,
+    ].slice(0, MAX_HISTORY);
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    if (historyRef.current.length === 0) return;
+    const [prev, ...rest] = historyRef.current;
+    historyRef.current = rest;
+    setCanvasNodes(prev.nodes);
+    setCanvasEdges(prev.edges);
+    setCodeSource('canvas');
+    if (editorRef.current) {
+      editorRef.current.setValue(prev.code);
+      liveCodeRef.current = prev.code;
+    }
+  }, []);
+
+  // Global Ctrl+Z (capture phase) — only intercept when last action was
+  // canvas-originated. When codeSource === 'user', Monaco handles its own
+  // undo natively; we must not fight it.
+  useEffect(() => {
+    const handler = (e) => {
+      if (!((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey)) return;
+      if (DEMO_MODE) return;
+      if (codeSource === 'canvas' && historyRef.current.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleUndo();
+      }
+      // codeSource === 'user' → fall through, Monaco handles it
+    };
+    window.addEventListener('keydown', handler, { capture: true });
+    return () => window.removeEventListener('keydown', handler, { capture: true });
+  }, [codeSource, handleUndo]);
+
+  // ── Template switcher ────────────────────────────────────────────────────────
+  // Declared here (after useTracer + editorRef) so sendCode and editorRef
+  // are both in scope — avoids "Cannot access before initialization" TDZ error.
+  const handleTemplateChange = useCallback((templateId) => {
+    const template = TEMPLATES[templateId];
+    if (!template) return;
+
+    setSelectedTemplate(templateId);
+    setInputShape(template.inputShape);
+    liveCodeRef.current = template.code;
+    setCodeSource('user');
+
+    // Force Monaco to show the new code immediately (imperative API —
+    // avoids a full re-render cycle and cursor-reset side-effects).
+    if (editorRef.current) {
+      editorRef.current.setValue(template.code);
+    }
+
+    // Trigger the debounced WS trace
+    sendCode(template.code);
+  }, [sendCode]);
+
+  const highlightBlockInEditor = useCallback((moduleTarget) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    // Clear all decorations when no target
+    if (!moduleTarget) {
+      decorationIdsRef.current = editor.deltaDecorations(decorationIdsRef.current, []);
+      return;
+    }
+
+    const model = editor.getModel();
+    if (!model) return;
+
+    // Primary search: 'self.<target>' — hits both __init__ assignment and forward() call
+    let matches = model.findMatches(
+      'self.' + moduleTarget,
+      /*searchOnlyEditableRange*/ true,
+      /*isRegex*/ false,
+      /*matchCase*/ false,
+      /*wordSeparators*/ null,
+      /*captureMatches*/ true,
+    );
+
+    // Fallback: bare target name (Input/output placeholder nodes, generated names)
+    if (!matches || matches.length === 0) {
+      matches = model.findMatches(
+        moduleTarget,
+        true, false, false, null, true,
+      );
+    }
+
+    if (!matches || matches.length === 0) {
+      decorationIdsRef.current = editor.deltaDecorations(decorationIdsRef.current, []);
+      return;
+    }
+
+    const newDecorations = matches.map((m) => ({
+      range: m.range,
+      options: {
+        isWholeLine: true,
+        className: 'mulm-block-highlight',
+        glyphMarginClassName: 'mulm-block-gutter',
+      },
+    }));
+
+    decorationIdsRef.current = editor.deltaDecorations(
+      decorationIdsRef.current,
+      newDecorations,
+    );
+
+    editor.revealLineInCenter(matches[0].range.startLineNumber);
+  }, []);
 
   // ── Monaco change handler ────────────────────────────────────────────────────
   const handleCodeChange = useCallback((value) => {
     if (DEMO_MODE) return;   // notebook is read-only in demo mode
     const v = value ?? '';
+
+    // Clear canvas immediately when code becomes empty — no need to wait for
+    // the backend (which returns an error on empty input anyway).
+    if (!v.trim()) {
+      setCanvasNodes([]);
+      setCanvasEdges([]);
+      setIsTracing(false);
+      clearTimeout(tracingTimerRef.current);
+      liveCodeRef.current = v;
+      setCodeSource('user');
+      return; // no WS send needed
+    }
+
+    // Debounce-push a snapshot so a subsequent canvas action can undo past this text.
+    clearTimeout(codeHistoryTimerRef.current);
+    codeHistoryTimerRef.current = setTimeout(() => {
+      pushHistory(canvasNodes, canvasEdges, v);
+    }, 500);
     liveCodeRef.current = v;   // ref update — zero React re-renders
     setCodeSource('user');     // no-op if already 'user' (React bails out)
+
+    // Show Tracing… badge; auto-reset after 5s in case the backend never replies.
+    setIsTracing(true);
+    clearTimeout(tracingTimerRef.current);
+    tracingTimerRef.current = setTimeout(() => setIsTracing(false), 5000);
+
     sendCode(v);
-  }, [sendCode]);
+  }, [sendCode, pushHistory, canvasNodes, canvasEdges]);
 
   // ── Canvas drop handler (palette → canvas) ───────────────────────────────────
   const handleCanvasNodesChange = useCallback((nodes) => {
+    // Node count grew → a block was just dropped; snapshot current state first
+    if (nodes.length > canvasNodes.length) {
+      pushHistory(canvasNodes, canvasEdges, liveCodeRef.current);
+    }
     setCanvasNodes(nodes);
     setCodeSource('canvas');
-  }, []);
+  }, [canvasNodes, canvasEdges, pushHistory]);
 
   const handleCanvasEdgesChange = useCallback((edges) => {
+    // Edge count grew → user drew a new wire; snapshot current state first
+    if (edges.length > canvasEdges.length) {
+      pushHistory(canvasNodes, canvasEdges, liveCodeRef.current);
+    }
     setCanvasEdges(edges);
     setCodeSource('canvas');
+  }, [canvasNodes, canvasEdges, pushHistory]);
+
+  // ── Node deletion (Delete / Backspace key or context menu) ───────────────────
+  const handleNodesDelete = useCallback((deletedNodes) => {
+    if (DEMO_MODE) return;
+    // Snapshot BEFORE mutation so Ctrl+Z can restore the full previous state
+    pushHistory(canvasNodes, canvasEdges, liveCodeRef.current);
+    const deletedIds = new Set(deletedNodes.map((n) => n.id));
+
+    setCanvasNodes((prev) => {
+      const nextNodes = prev.filter((n) => !deletedIds.has(n.id));
+      setCanvasEdges((prevEdges) => {
+        const nextEdges = prevEdges.filter(
+          (e) => !deletedIds.has(e.source) && !deletedIds.has(e.target),
+        );
+        // Codegen on the surviving graph
+        const { code } = generateCode(nextNodes, nextEdges);
+        if (code && editorRef.current) {
+          editorRef.current.setValue(code);
+          liveCodeRef.current = code;
+          sendCode(code);
+        }
+        highlightBlockInEditor(null);
+        setSelectedNode(null);
+        setCodeSource('canvas');
+        return nextEdges;
+      });
+      return nextNodes;
+    });
+  }, [sendCode, highlightBlockInEditor, pushHistory, canvasNodes, canvasEdges]);
+
+  // ── Edge deletion ────────────────────────────────────────────────────────
+  const handleEdgesDelete = useCallback((deletedEdges) => {
+    if (DEMO_MODE) return;
+    // Snapshot BEFORE mutation
+    pushHistory(canvasNodes, canvasEdges, liveCodeRef.current);
+    const deletedIds = new Set(deletedEdges.map((e) => e.id));
+    setCanvasEdges((prev) => {
+      const nextEdges = prev.filter((e) => !deletedIds.has(e.id));
+      const { code } = generateCode(canvasNodes, nextEdges);
+      if (code && editorRef.current) {
+        editorRef.current.setValue(code);
+        liveCodeRef.current = code;
+        sendCode(code);
+      }
+      setCodeSource('canvas');
+      return nextEdges;
+    });
+  }, [sendCode, canvasNodes, canvasEdges, pushHistory]);
+
+  // ── Right-click context menu ──────────────────────────────────────────────
+  // contextMenu: null | { node, x, y }
+  const [contextMenu, setContextMenu] = useState(null);
+
+  const handleNodeContextMenu = useCallback((evt, node) => {
+    evt.preventDefault();
+    setContextMenu({ node, x: evt.clientX, y: evt.clientY });
   }, []);
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
   // ── Export ───────────────────────────────────────────────────────────────────
   const handleExport = async () => {
     if (DEMO_MODE) {
       // In demo mode, export the current demo code directly as a download
       const blob = new Blob([notebookCode], { type: 'text/plain' });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
       a.download = 'TransformerEncoderBlock.py';
       a.click();
       URL.revokeObjectURL(url);
@@ -207,14 +449,14 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           graph: lastGraphRef.current,
-          code:  notebookCode,
+          code: notebookCode,
         }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const blob = await resp.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
       a.download = 'mulm_export.py';
       a.click();
       URL.revokeObjectURL(url);
@@ -226,9 +468,9 @@ export default function App() {
   // ── WS status indicator ──────────────────────────────────────────────────────
   const statusColor = DEMO_MODE
     ? '#5A9B7C'                                          // always green in demo
-    : wsStatus === 'open'       ? '#5A9B7C'
-    : wsStatus === 'connecting' ? 'var(--status-unknown, #B8860B)'
-    : 'var(--status-unknown, #B8860B)';
+    : wsStatus === 'open' ? '#5A9B7C'
+      : wsStatus === 'connecting' ? 'var(--status-unknown, #B8860B)'
+        : 'var(--status-unknown, #B8860B)';
 
   const statusLabel = DEMO_MODE
     ? 'LIVE'
@@ -239,7 +481,7 @@ export default function App() {
     : `WebSocket: ${wsStatus}`;
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" onClick={closeContextMenu}>
 
       {/* ── Title bar ─────────────────────────────────────────────────────────── */}
       <header className="titlebar">
@@ -279,6 +521,23 @@ export default function App() {
           </span>
         </div>
 
+        {/* Tracing… badge — visible while WS request is in-flight */}
+        {isTracing && !DEMO_MODE && (
+          <span style={{
+            fontSize: 10,
+            fontFamily: 'Inter, var(--font-sans), sans-serif',
+            fontWeight: 500,
+            color: '#5B8DB8',
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            userSelect: 'none',
+            marginLeft: 6,
+            animation: 'tracing-pulse 1s ease-in-out infinite',
+          }}>
+            Tracing…
+          </span>
+        )}
+
         <div className="titlebar__spacer" />
 
         <button className="titlebar__btn" onClick={handleExport}>
@@ -297,6 +556,25 @@ export default function App() {
           modelName={modelName}
           onNodesChange={handleCanvasNodesChange}
           onEdgesChange={handleCanvasEdgesChange}
+          onNodesDelete={handleNodesDelete}
+          onEdgesDelete={handleEdgesDelete}
+          onNodeContextMenu={handleNodeContextMenu}
+          onNodeClick={(_evt, node) => {
+            closeContextMenu();
+            highlightBlockInEditor(node.data?.target);
+            setSelectedNode(node);
+          }}
+          onPaneClick={() => {
+            closeContextMenu();
+            highlightBlockInEditor(null);
+            setSelectedNode(null);
+          }}
+          onSelectionChange={({ nodes: sel }) => {
+            if (sel.length === 0) {
+              highlightBlockInEditor(null);
+              setSelectedNode(null);
+            }
+          }}
         />
 
         <div className="right-panel">
@@ -304,11 +582,96 @@ export default function App() {
             code={notebookCode}
             onChange={handleCodeChange}
             codeSource={DEMO_MODE ? 'demo' : codeSource}
+            onEditorMount={(ed) => { editorRef.current = ed; }}
+            selectedTemplate={selectedTemplate}
+            onTemplateChange={handleTemplateChange}
           />
-          <AnalysisPanel problems={allProblems} />
+          <AnalysisPanel
+            problems={allProblems}
+            outputLog={outputLog}
+            terminalLog={terminalLog}
+            selectedNode={selectedNode}
+          />
         </div>
 
       </div>
+
+      {/* ── Node right-click context menu ───────────────────────────────────────── */}
+      {contextMenu && (
+        <NodeContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          node={contextMenu.node}
+          onRemove={() => {
+            handleNodesDelete([contextMenu.node]);
+            closeContextMenu();
+          }}
+          onViewSource={() => {
+            highlightBlockInEditor(contextMenu.node.data?.target);
+            closeContextMenu();
+          }}
+          onClose={closeContextMenu}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── NodeContextMenu ───────────────────────────────────────────────────────────────────────
+// Pure presentational — no hooks of its own except one useEffect for Escape.
+// Positioned with fixed CSS at the mouse coordinates from onContextMenu.
+// Dismisses on: click outside (App shell onClick closeContextMenu),
+//               Escape key, any menu action.
+function NodeContextMenu({ x, y, node: _node, onRemove, onViewSource, onClose }) {
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  return (
+    <div
+      onContextMenu={(e) => e.preventDefault()}
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        position:     'fixed',
+        left:         x,
+        top:          y,
+        zIndex:       9999,
+        background:   '#1D2027',
+        border:       '1px solid #2C313C',
+        borderRadius: 3,
+        padding:      '4px 0',
+        minWidth:     140,
+        boxShadow:    '0 4px 16px rgba(0,0,0,0.45)',
+      }}
+    >
+      <ContextMenuItem label="View source" onClick={onViewSource} />
+      <ContextMenuItem label="Remove block" danger onClick={onRemove} />
+    </div>
+  );
+}
+
+function ContextMenuItem({ label, danger = false, onClick }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        padding:    '6px 16px',
+        fontFamily: 'Inter, var(--font-sans), sans-serif',
+        fontWeight: 400,
+        fontSize:   13,
+        cursor:     'pointer',
+        color:      hovered && danger ? '#C0392B' : '#E4E6EB',
+        background: hovered ? '#2C313C' : 'transparent',
+        userSelect: 'none',
+        transition: 'background 80ms, color 80ms',
+      }}
+    >
+      {label}
     </div>
   );
 }

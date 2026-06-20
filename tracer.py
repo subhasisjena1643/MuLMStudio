@@ -390,6 +390,20 @@ def _infer_dummy_input(
     except (ValueError, TypeError):
         pass
 
+    # ── MHA embed_dim detection ───────────────────────────────────────────────
+    # MultiheadAttention exposes embed_dim directly — use it so ShapeProp
+    # receives a tensor that matches the model's expected feature width.
+    # This handles d_model ≠ 512 (e.g. d_model=256, 1024, etc.).
+    for m in model.modules():
+        if isinstance(m, nn.MultiheadAttention):
+            return torch.randn(2, 128, m.embed_dim)
+
+    # ── First Linear in_features heuristic ───────────────────────────────────
+    # For non-MHA transformers: read the first Linear layer's input size.
+    for m in model.modules():
+        if isinstance(m, nn.Linear) and m.in_features > 1:
+            return torch.randn(2, 128, m.in_features)
+
     # Default: 3-D transformer-style input
     return torch.randn(2, 128, 512)
 

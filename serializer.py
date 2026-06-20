@@ -189,6 +189,20 @@ def _get_category(node: fx.Node, model: nn.Module) -> str:
         return "UNKNOWN"
     return _CATEGORY_MAP.get(module.__class__.__name__, "CORE")
 
+def get_display_label(node, named_modules):
+    if node.op == "placeholder":
+        return "Input"
+    if node.op == "output":
+        return "Output"
+    if node.op == "call_function":
+        fn = getattr(node.target, '__name__', str(node.target))
+        return {'add': 'Add', 'mul': 'Multiply'}.get(fn, fn.title())
+    if node.op == "call_module":
+        module = named_modules.get(str(node.target))
+        if module is None:
+            return str(node.target)
+        return module.__class__.__name__
+    return node.name
 
 def _get_label(node: fx.Node, model: nn.Module) -> str:
     """Human-readable block label for a node."""

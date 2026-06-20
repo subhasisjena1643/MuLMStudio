@@ -14,7 +14,7 @@ import { useState } from 'react';
 
 const TABS = ['PROBLEMS', 'OUTPUT', 'DEBUG', 'TERMINAL'];
 
-export default function AnalysisPanel({ problems = [] }) {
+export default function AnalysisPanel({ problems = [], outputLog = [], terminalLog = [], selectedNode = null }) {
   const [activeTab, setActiveTab] = useState('PROBLEMS');
 
   return (
@@ -50,14 +50,62 @@ export default function AnalysisPanel({ problems = [] }) {
           )
         )}
         {activeTab === 'OUTPUT' && (
-          <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-            — ready —
-          </div>
+          outputLog.length === 0 ? (
+            <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+              — ready —
+            </div>
+          ) : (
+            <div style={{ fontFamily: "'JetBrains Mono','Consolas',monospace", fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {outputLog.map((e) => (
+                <div key={e.id} style={{ color: e.isError ? 'var(--status-error)' : 'var(--text-muted)', whiteSpace: 'pre', lineHeight: 1.5 }}>
+                  {e.text}
+                </div>
+              ))}
+            </div>
+          )
         )}
-        {(activeTab === 'DEBUG' || activeTab === 'TERMINAL') && (
-          <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>
-            {activeTab.toLowerCase()} output will appear here
-          </div>
+        {activeTab === 'DEBUG' && (
+          selectedNode ? (
+            <div>
+              <div style={{ fontFamily: 'Inter, var(--font-ui), sans-serif', fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', marginBottom: 8 }}>
+                Selected: {selectedNode.data?.label ?? selectedNode.id}
+              </div>
+              <pre style={{
+                fontFamily: "'JetBrains Mono','Consolas',monospace",
+                fontSize: 11,
+                color: 'var(--text-muted)',
+                background: 'var(--bg-base)',
+                padding: 8,
+                margin: 0,
+                borderRadius: 2,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                lineHeight: 1.6,
+                overflowX: 'auto',
+              }}>
+                {JSON.stringify(selectedNode.data, null, 2)}
+              </pre>
+            </div>
+          ) : (
+            <div style={{ fontFamily: 'Inter, var(--font-ui), sans-serif', fontWeight: 400, fontSize: 13, color: 'var(--text-muted)' }}>
+              Select a block to inspect its properties.
+            </div>
+          )
+        )}
+        {activeTab === 'TERMINAL' && (
+          terminalLog.length === 0 ? (
+            <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+              — no messages yet —
+            </div>
+          ) : (
+            <div style={{ fontFamily: "'JetBrains Mono','Consolas',monospace", fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {terminalLog.map((e) => (
+                <div key={e.id} style={{ color: 'var(--text-muted)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', lineHeight: 1.5 }}>
+                  {e.text}
+                </div>
+              ))}
+            </div>
+          )
         )}
       </div>
     </div>

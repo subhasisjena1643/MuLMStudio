@@ -9,6 +9,10 @@
  *   valid    → muted green  (#3D7A56)  — smoothstep path (clean right-angle bends)
  *   mismatch → brick red    (#C0392B)  — bezier path     (curve + drop-shadow glow)
  *   unknown  → border-default (#2C313C) — smoothstep path (dashed)
+ *
+ * Shape pill:
+ *   Always rendered. Shows "[?]" in amber (#B8860B) when shape is
+ *   null/undefined/"[unknown]". Shows actual shape in muted grey (#7A8194).
  */
 import {
   BaseEdge,
@@ -40,6 +44,13 @@ export default function ShapeEdge({
     ? getBezierPath(pathArgs)
     : getSmoothStepPath({ ...pathArgs, borderRadius: 8 });
 
+  // Determine what label text and color to show.
+  // Always render the pill — show "[?]" in amber for missing/unknown shapes.
+  const shapeStr = data.shape;
+  const isUnknownShape = !shapeStr || shapeStr === '[unknown]' || shapeStr === 'unknown';
+  const labelText  = isUnknownShape ? '[?]' : shapeStr;
+  const labelColor = isUnknownShape ? '#B8860B' : '#7A8194';
+
   return (
     <>
       <BaseEdge
@@ -58,24 +69,29 @@ export default function ShapeEdge({
         }}
       />
 
-      {/* Shape pill — only render if shape data is present */}
-      {data.shape && (
-        <EdgeLabelRenderer>
-          <div
-            className={[
-              'shape-edge-pill',
-              isMismatch ? 'shape-edge-pill--mismatch' : '',
-              status === 'unknown' ? 'shape-edge-pill--unknown' : '',
-            ].join(' ')}
-            style={{
-              left: labelX,
-              top: labelY,
-            }}
-          >
-            {data.shape}
-          </div>
-        </EdgeLabelRenderer>
-      )}
+      {/* Shape pill — always rendered regardless of status */}
+      <EdgeLabelRenderer>
+        <div
+          className={[
+            'shape-edge-pill',
+            isMismatch ? 'shape-edge-pill--mismatch' : '',
+            status === 'unknown' ? 'shape-edge-pill--unknown' : '',
+          ].join(' ')}
+          style={{
+            left:       labelX,
+            top:        labelY,
+            color:      labelColor,
+            fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+            fontSize:   11,
+            background: '#1D2027',
+            border:     '1px solid #2C313C',
+            borderRadius: 3,
+            padding:    '1px 5px',
+          }}
+        >
+          {labelText}
+        </div>
+      </EdgeLabelRenderer>
     </>
   );
 }

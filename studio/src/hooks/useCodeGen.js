@@ -265,7 +265,11 @@ export function generateCode(nodes, edges) {
     const name  = varOf(node.id);
     const preds = predecessors.get(node.id) ?? [];
 
-    // Resolve the primary input variable (first predecessor's output)
+    // Resolve the primary input variable (first predecessor's output).
+    // If this node has no predecessors and is not the graph input, it is
+    // disconnected (happens after node/edge deletion). Mark it visibly
+    // instead of silently generating wrong code.
+    const isDisconnected = preds.length === 0 && node.type !== 'mlmInputNode';
     const primaryInput = preds.length > 0
       ? (nodeVarMap.get(preds[0]) ?? varOf(preds[0]))
       : (inputVars[0] ?? 'x');
@@ -275,7 +279,9 @@ export function generateCode(nodes, edges) {
     // have no entry in BLOCK_TEMPLATES.
     if (node.type === 'mlmFunctionNode') {
       const op = (node.data?.label ?? '').toLowerCase();
-      if (op === 'add') {
+      if (isDisconnected) {
+        fwdLines.push(`${name} = ${node.data?.label ?? 'fn'}(???)  # disconnected`);
+      } else if (op === 'add') {
         if (preds.length >= 2) {
           const a = nodeVarMap.get(preds[0]) ?? varOf(preds[0]);
           const b = nodeVarMap.get(preds[1]) ?? varOf(preds[1]);
@@ -294,6 +300,14 @@ export function generateCode(nodes, edges) {
 
     // ── Module nodes ─────────────────────────────────────────────────────────
     const tmpl = resolveTemplate(node);
+
+    if (isDisconnected) {
+      // Node has no incoming edge — emit a clearly broken placeholder so the
+      // user sees ??? rather than silently wrong code.
+      fwdLines.push(`${name} = self.${name}(???)  # disconnected`);
+      nodeVarMap.set(node.id, name);
+      continue;
+    }
 
     if (!tmpl) {
       // Unknown block — emit a placeholder assignment that at least chains

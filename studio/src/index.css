@@ -623,3 +623,44 @@ html, body, #root {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.35; }
 }
+
+/* ── Monaco node-click decorations ──────────────────────────────────────────── */
+
+/* Full-line background highlight when a canvas node is selected */
+.mulm-block-highlight {
+  background: rgba(91, 141, 184, 0.12);  /* --border-focus at 12% opacity */
+}
+
+/* Left-gutter accent bar */
+.mulm-block-gutter::before {
+  content: "▌";
+  color: #5B8DB8;   /* --border-focus */
+  font-size: 10px;
+}
+
+/* ── Notebook upload button ──────────────────────────────────────────────────── */
+.notebook-upload-btn {
+  height: 24px;
+  padding: 0 8px;
+  background: transparent;
+  border: 1px solid #2C313C;
+  border-radius: 3px;
+  color: #7A8194;
+  font-family: 'Inter', var(--font-ui), sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+.notebook-upload-btn:hover {
+  border-color: #5B8DB8;
+  color: #E4E6EB;
+}
+
+/* ── Tracing animation (titlebar badge) ──────────────────────────────────────── */
+@keyframes tracing-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}

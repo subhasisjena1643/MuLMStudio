@@ -6,14 +6,15 @@
  * data.shape:  '[2, 128, 512]'
  *
  * Wire colors:
- *   valid    → muted green  (#3D7A56)
- *   mismatch → brick red    (#C0392B) + drop-shadow glow
- *   unknown  → border-default (#2C313C)
+ *   valid    → muted green  (#3D7A56)  — smoothstep path (clean right-angle bends)
+ *   mismatch → brick red    (#C0392B)  — bezier path     (curve + drop-shadow glow)
+ *   unknown  → border-default (#2C313C) — smoothstep path (dashed)
  */
 import {
   BaseEdge,
   EdgeLabelRenderer,
   getBezierPath,
+  getSmoothStepPath,
 } from '@xyflow/react';
 
 const WIRE_COLORS = {
@@ -28,15 +29,16 @@ export default function ShapeEdge({
   targetX, targetY, targetPosition,
   data = {},
 }) {
-  const status = data.status || 'unknown';
-  const color  = WIRE_COLORS[status] ?? WIRE_COLORS.unknown;
-
-  const [edgePath, labelX, labelY] = getBezierPath({
-    sourceX, sourceY, sourcePosition,
-    targetX, targetY, targetPosition,
-  });
-
+  const status   = data.status || 'unknown';
+  const color    = WIRE_COLORS[status] ?? WIRE_COLORS.unknown;
   const isMismatch = status === 'mismatch';
+
+  // Mismatch → bezier (curved, draws attention with the glow)
+  // Valid / unknown → smoothstep (clean right-angle bends, no unnecessary curves)
+  const pathArgs = { sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition };
+  const [edgePath, labelX, labelY] = isMismatch
+    ? getBezierPath(pathArgs)
+    : getSmoothStepPath({ ...pathArgs, borderRadius: 8 });
 
   return (
     <>
@@ -68,8 +70,6 @@ export default function ShapeEdge({
             style={{
               left: labelX,
               top: labelY,
-              // Show only on edges that have meaningful shape info
-              // (suppress for trivial/redundant edges)
             }}
           >
             {data.shape}

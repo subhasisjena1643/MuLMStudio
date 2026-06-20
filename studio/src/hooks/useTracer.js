@@ -82,20 +82,23 @@ export function useTracer(onGraph, onError, inputShape = [2, 128, 512]) {
         };
         onGraphRef.current(graph);
       } else if (result.status === 'error') {
-        // result.error is an object {phase, type, message, traceback} — flatten to string
+        // result.error is an object {phase, type, message, traceback}
+        // Pass a structured object so AnalysisPanel can split headline from traceback.
         const err = result.error;
-        let msg;
+        let errorPayload;
         if (!err) {
-          msg = 'Trace error';
+          errorPayload = { headline: 'Trace error', traceback: null };
         } else if (typeof err === 'string') {
-          msg = err;
+          errorPayload = { headline: err, traceback: null };
         } else {
-          // e.g. "SyntaxError (parse): invalid syntax\n<traceback>"
-          const label = err.type ? `${err.type}${err.phase ? ` (${err.phase})` : ''}` : 'Error';
-          const body  = err.message ?? JSON.stringify(err);
-          msg = err.traceback ? `${label}: ${body}\n\n${err.traceback}` : `${label}: ${body}`;
+          const label    = err.type ? `${err.type}${err.phase ? ` (${err.phase})` : ''}` : 'Error';
+          const body     = err.message ?? JSON.stringify(err);
+          errorPayload = {
+            headline:  `${label}: ${body}`,
+            traceback: err.traceback ?? null,
+          };
         }
-        onErrorRef.current?.(msg);
+        onErrorRef.current?.(errorPayload);
       }
     };
 

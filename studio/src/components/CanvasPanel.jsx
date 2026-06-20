@@ -2,15 +2,10 @@
  * CanvasPanel.jsx
  * Center panel — React Flow canvas with:
  *   - Engineering graph-paper grid (major/minor lines via SVG pattern)
- *   - Dagre auto-layout applied whenever graph data changes
+ *   - Dagre auto-layout (TB, vertical) applied whenever graph data changes
  *   - Palette block drop-in: drag from PalettePanel, drop on canvas →
  *       new node added, onNodesChange / onEdgesChange callbacks fire → App → useCodeGen
  *   - Empty-state: muted "Write or paste a PyTorch module to begin" text
- *
- * Key correctness note:
- *   onNodesChange / onEdgesChange are called ONLY from user-driven events
- *   (drop, connect, delete) — NOT from prop-driven syncs. This prevents the
- *   infinite loop: prop → layout → setNodes → notifyParent → setCanvasProp → ...
  *
  * Props:
  *   nodes          - React Flow node array (controlled from App)
@@ -83,7 +78,7 @@ function CanvasPanelInner({
   onNodesChange: notifyNodes,
   onEdgesChange: notifyEdges,
 }) {
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
 
   // Stable refs to avoid stale closures in callbacks
   const notifyNodesRef = useRef(notifyNodes);
@@ -91,28 +86,29 @@ function CanvasPanelInner({
   useEffect(() => { notifyNodesRef.current = notifyNodes; }, [notifyNodes]);
   useEffect(() => { notifyEdgesRef.current = notifyEdges; }, [notifyEdges]);
 
-  // Apply Dagre layout on incoming prop changes.
-  // This runs only when propNodes / propEdges reference changes (WS update or
-  // initial load). It does NOT run on local state updates, avoiding the loop.
+  // Apply Dagre layout whenever propNodes / propEdges change (WS update or load).
   const layoutedNodes = useMemo(() => {
     if (!propNodes || propNodes.length === 0) return [];
     return applyDagreLayout(propNodes, propEdges ?? [], {
-      rankdir: 'TB', nodesep: 60, ranksep: 80,
+      rankdir: 'TB', nodesep: 60, ranksep: 100,
     });
   }, [propNodes, propEdges]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(propEdges ?? []);
 
-  // Sync prop changes into local RF state (WS graph updates, DEMO_MODE etc.)
-  // Uses a ref guard so we don't re-trigger on our own local mutations.
+  // Sync prop changes into local RF state.
+  // A ref guard prevents treating our own setNodes as a user-driven change.
   const syncingRef = useRef(false);
 
   useEffect(() => {
     syncingRef.current = true;
     setNodes(layoutedNodes);
     syncingRef.current = false;
-  }, [layoutedNodes, setNodes]);
+    if (layoutedNodes.length > 0) {
+      setTimeout(() => fitView({ padding: 0.15, duration: 300 }), 50);
+    }
+  }, [layoutedNodes, setNodes, fitView]);
 
   useEffect(() => {
     syncingRef.current = true;
@@ -124,7 +120,6 @@ function CanvasPanelInner({
   const onConnect = useCallback((params) => {
     setEdges((eds) => {
       const next = addEdge({ ...params, type: 'shapeEdge' }, eds);
-      // Notify parent AFTER state update settles (microtask flush)
       setTimeout(() => notifyEdgesRef.current?.(next), 0);
       return next;
     });
@@ -159,13 +154,12 @@ function CanvasPanelInner({
         sync_state: block.sync_state,
         category:   block.category,
         params:     block.default_params ?? {},
-        block_id:   block.id,   // used by useCodeGen template lookup
+        block_id:   block.id,
       },
     };
 
     setNodes((nds) => {
       const next = [...nds, newNode];
-      // Notify parent after state settles — this switches notebook to 'canvas' mode
       setTimeout(() => notifyNodesRef.current?.(next), 0);
       return next;
     });
@@ -232,7 +226,6 @@ function CanvasPanelInner({
 }
 
 // ── Public export — wraps in ReactFlowProvider ────────────────────────────────
-// useReactFlow() (screenToFlowPosition) requires a Provider ancestor.
 export default function CanvasPanel(props) {
   return (
     <ReactFlowProvider>

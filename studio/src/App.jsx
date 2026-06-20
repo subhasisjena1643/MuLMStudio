@@ -133,8 +133,11 @@ export default function App() {
   // ── WebSocket hook (no-op in DEMO_MODE) ──────────────────────────────────────
   const handleGraph = useCallback((graph) => {
     if (DEMO_MODE) return;
-    const laidNodes = graph.nodes.map((n) => ({ ...n, position: n.position ?? { x: 0, y: 0 } }));
-    setCanvasNodes(laidNodes);
+    // Strip any backend-supplied positions so applyDagreLayout in CanvasPanel
+    // can compute fresh positions from topology. If we pass {x:0,y:0} for every
+    // node, dagre still runs but all nodes end up collapsed at the origin.
+    const rawNodes = graph.nodes.map(({ position: _pos, ...rest }) => rest);
+    setCanvasNodes(rawNodes);
     setCanvasEdges(graph.edges);
     lastGraphRef.current = graph;
     setTraceError(null);
@@ -151,10 +154,8 @@ export default function App() {
     }
 
     // Extract model class name for the canvas badge
-    const callNodes = graph.nodes.filter((n) => n.data?.op === 'call_module');
-    if (callNodes.length > 0) {
-      setModelName('Live model');
-    }
+    const firstCall = graph.nodes.find((n) => n.data?.op === 'call_module');
+    setModelName(graph.model_name ?? firstCall?.data?.label ?? 'Live model');
   }, []);
 
   const handleTraceError = useCallback((msg) => {
@@ -226,8 +227,12 @@ export default function App() {
   const statusColor = DEMO_MODE
     ? '#5A9B7C'                                          // always green in demo
     : wsStatus === 'open'       ? '#5A9B7C'
-    : wsStatus === 'connecting' ? '#B8860B'
-    : '#C0392B';
+    : wsStatus === 'connecting' ? 'var(--status-unknown, #B8860B)'
+    : 'var(--status-unknown, #B8860B)';
+
+  const statusLabel = DEMO_MODE
+    ? 'LIVE'
+    : wsStatus === 'open' ? 'LIVE' : 'RECONNECTING';
 
   const statusTitle = DEMO_MODE
     ? `Demo mode${mismatching ? ' — mismatch active (Ctrl+Shift+E to reset)' : ' — press Ctrl+Shift+E to show mismatch'}`
@@ -247,17 +252,32 @@ export default function App() {
           Prototype 0.1{DEMO_MODE ? ' · DEMO' : ''}
         </span>
 
-        {/* Status dot */}
+        {/* Status dot + label */}
         <div
           title={statusTitle}
           style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            marginLeft: 8, flexShrink: 0,
+          }}
+        >
+          <div style={{
             width: 6, height: 6, borderRadius: '50%',
             background: statusColor,
-            marginLeft: 8, flexShrink: 0, alignSelf: 'center',
-            // Pulse the dot red when mismatch is active in demo mode
+            flexShrink: 0,
             animation: DEMO_MODE && mismatching ? 'pulse-error 2s ease-in-out infinite' : 'none',
-          }}
-        />
+          }} />
+          <span style={{
+            color: 'var(--text-muted)',
+            fontFamily: 'Inter, var(--font-sans), sans-serif',
+            fontWeight: 500,
+            fontSize: 10,
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            userSelect: 'none',
+          }}>
+            {statusLabel}
+          </span>
+        </div>
 
         <div className="titlebar__spacer" />
 

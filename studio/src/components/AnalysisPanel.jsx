@@ -1,7 +1,14 @@
 /**
  * AnalysisPanel.jsx
  * Bottom panel — PROBLEMS | OUTPUT | DEBUG | TERMINAL tabs.
- * PROBLEMS active by default. Stub: 0 problems for now.
+ *
+ * Each problem entry shows:
+ *   [ERR/WARN badge]  [one-line headline message]
+ *                     [Show details ↓]   ← text toggle, collapsed by default
+ *                     [full traceback]   ← expands on click, JetBrains Mono, muted
+ *
+ * problem shape:
+ *   { id, severity: 'error'|'warn', message: string | { headline, traceback } }
  */
 import { useState } from 'react';
 
@@ -38,7 +45,7 @@ export default function AnalysisPanel({ problems = [] }) {
             </div>
           ) : (
             problems.map((p, i) => (
-              <ProblemRow key={i} problem={p} />
+              <ProblemRow key={p.id ?? i} problem={p} />
             ))
           )
         )}
@@ -57,33 +64,97 @@ export default function AnalysisPanel({ problems = [] }) {
   );
 }
 
+// ── ProblemRow ────────────────────────────────────────────────────────────────
+
 function ProblemRow({ problem }) {
+  const [expanded, setExpanded] = useState(false);
   const isError = problem.severity === 'error';
+
+  // message can be a plain string (from codeGen / demo) or
+  // a structured { headline, traceback } object (from useTracer live errors).
+  const msg = problem.message;
+  let headline, traceback;
+  if (msg && typeof msg === 'object') {
+    headline  = msg.headline  ?? JSON.stringify(msg);
+    traceback = msg.traceback ?? null;
+  } else {
+    // Plain string — treat whole thing as headline, no traceback
+    headline  = typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2);
+    traceback = null;
+  }
+
+  const hasDetails = Boolean(traceback);
+
   return (
     <div style={{
-      display: 'flex',
-      alignItems: 'flex-start',
-      gap: 8,
-      padding: '5px 0',
+      padding: '6px 0',
       borderBottom: '1px solid var(--border-default)',
       fontSize: 11,
     }}>
-      <span style={{
-        color: isError ? 'var(--status-error)' : 'var(--status-unknown)',
-        fontWeight: 600,
-        flexShrink: 0,
-        fontFamily: 'var(--font-mono)',
-        fontSize: 10,
-      }}>
-        {isError ? 'ERR' : 'WARN'}
-      </span>
-      <span style={{ color: 'var(--text-primary)', flex: 1, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-          {typeof problem.message === 'string' ? problem.message : JSON.stringify(problem.message, null, 2)}
+      {/* Badge + headline row */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        {/* ERR / WARN badge */}
+        <span style={{
+          color:       isError ? 'var(--status-error)' : 'var(--status-unknown)',
+          fontWeight:  600,
+          flexShrink:  0,
+          fontFamily:  'var(--font-mono)',
+          fontSize:    10,
+          lineHeight:  '18px',   // vertically align with text
+        }}>
+          {isError ? 'ERR' : 'WARN'}
         </span>
-      {problem.node && (
-        <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>
-          {problem.node}
+
+        {/* Headline message — single line with word-break for long identifiers */}
+        <span style={{
+          color:      'var(--text-primary)',
+          flex:       1,
+          whiteSpace: 'pre-wrap',
+          wordBreak:  'break-word',
+          lineHeight: 1.5,
+        }}>
+          {headline}
         </span>
+      </div>
+
+      {/* "Show details" toggle — only when traceback exists */}
+      {hasDetails && (
+        <div style={{ paddingLeft: 32, marginTop: 3 }}>
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            style={{
+              background:    'none',
+              border:        'none',
+              padding:       0,
+              cursor:        'pointer',
+              color:         'var(--text-muted)',
+              fontFamily:    'var(--font-sans)',
+              fontWeight:    400,
+              fontSize:      10,
+              letterSpacing: '0.01em',
+              userSelect:    'none',
+            }}
+          >
+            {expanded ? 'Hide details' : 'Show details'}
+          </button>
+
+          {/* Expanded traceback */}
+          {expanded && (
+            <pre style={{
+              margin:      '6px 0 2px',
+              padding:     0,
+              fontFamily:  "'JetBrains Mono', 'Fira Code', var(--font-mono), monospace",
+              fontSize:    10,
+              color:       'var(--text-muted)',
+              whiteSpace:  'pre-wrap',
+              wordBreak:   'break-word',
+              lineHeight:  1.6,
+              overflowX:   'auto',
+            }}>
+              {traceback}
+            </pre>
+          )}
+        </div>
       )}
     </div>
   );

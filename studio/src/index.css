@@ -1,0 +1,625 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   µLM Studio — Design System
+   Design brief: industrial / EDA instrument panel, NOT a SaaS dashboard.
+   Reference class: VS Code, KiCad, oscilloscope UIs.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ── Reset ──────────────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Design tokens ───────────────────────────────────────────────────────────── */
+:root {
+  /* Color — 6 named values, desaturated and industrial */
+  --bg-base:        #16181D;   /* Canvas/app bg — graphite, not pure black */
+  --bg-elevated:    #1D2027;   /* Panels, palette cards, analysis tray */
+  --border-default: #2C313C;   /* Standard hairlines */
+  --border-focus:   #5B8DB8;   /* Steel-blue — atomic badge + focus rings only */
+  --text-primary:   #E4E6EB;   /* Off-white — not pure white */
+  --text-muted:     #7A8194;   /* Secondary labels, hints */
+  --status-error:   #C0392B;   /* Brick red — instrument warning */
+  --status-unknown: #B8860B;   /* Dark goldenrod amber — [?] states */
+  --status-valid:   #3D7A56;   /* Muted green — valid wire */
+
+  /* Category accent colors (small 3px dots, never large fills) */
+  --cat-core:           #6B7280;
+  --cat-attention:      #5B8DB8;
+  --cat-norm:           #5A9B7C;
+  --cat-vision:         #9B7CB8;
+  --cat-regularization: #8A8E99;
+  --cat-activation:     #8A8E99;
+
+  /* Typography */
+  --font-ui:   'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+
+  /* Spacing */
+  --panel-header-h: 38px;
+  --titlebar-h:     36px;
+}
+
+/* ── Global ──────────────────────────────────────────────────────────────────── */
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── App shell ───────────────────────────────────────────────────────────────── */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* ── Title bar ───────────────────────────────────────────────────────────────── */
+.titlebar {
+  height: var(--titlebar-h);
+  min-height: var(--titlebar-h);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-default);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.titlebar__logo {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.titlebar__logo-accent {
+  color: var(--border-focus);
+}
+
+.titlebar__sep {
+  color: var(--border-default);
+  font-size: 16px;
+}
+
+.titlebar__title {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.titlebar__spacer {
+  flex: 1;
+}
+
+.titlebar__btn {
+  height: 26px;
+  padding: 0 12px;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: border-color 150ms ease, color 150ms ease;
+}
+.titlebar__btn:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+/* ── Three-panel body ────────────────────────────────────────────────────────── */
+.workspace {
+  display: grid;
+  grid-template-columns: 200px 1fr 400px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Palette panel ───────────────────────────────────────────────────────────── */
+.palette-panel {
+  background: var(--bg-elevated);
+  border-right: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.palette-panel__header {
+  height: var(--panel-header-h);
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border-default);
+  flex-shrink: 0;
+}
+
+.palette-panel__header-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.palette-panel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.palette-panel__body::-webkit-scrollbar { width: 4px; }
+.palette-panel__body::-webkit-scrollbar-track { background: transparent; }
+.palette-panel__body::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 2px; }
+
+.palette-category {
+  margin-bottom: 4px;
+}
+
+.palette-category__label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  padding: 6px 12px 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.palette-category__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.palette-block {
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: grab;
+  transition: background 100ms ease;
+  border-radius: 0;
+}
+.palette-block:hover {
+  background: #252830;
+}
+.palette-block:active {
+  cursor: grabbing;
+}
+
+.palette-block__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.palette-block__name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.palette-block__badge {
+  font-size: 9px;
+  color: var(--border-focus);
+  font-family: var(--font-mono);
+}
+
+/* ── Canvas panel ────────────────────────────────────────────────────────────── */
+.canvas-panel {
+  position: relative;
+  background: var(--bg-base);
+  overflow: hidden;
+}
+
+/* React Flow overrides — enforce design system */
+.react-flow {
+  background: var(--bg-base) !important;
+}
+
+.react-flow__renderer {
+  background: transparent !important;
+}
+
+.react-flow__controls {
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border-default) !important;
+  border-radius: 3px !important;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid var(--border-default) !important;
+  color: var(--text-muted) !important;
+  fill: var(--text-muted) !important;
+  width: 26px !important;
+  height: 26px !important;
+}
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+.react-flow__controls-button:hover {
+  background: #252830 !important;
+  fill: var(--text-primary) !important;
+}
+
+.react-flow__minimap {
+  border: 1px solid var(--border-default) !important;
+  border-radius: 3px !important;
+  background: var(--bg-elevated) !important;
+}
+
+.react-flow__node {
+  cursor: default;
+}
+
+.react-flow__handle {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  border: 1.5px solid var(--border-default) !important;
+  background: var(--bg-base) !important;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+.react-flow__handle:hover {
+  background: var(--border-focus) !important;
+  border-color: var(--border-focus) !important;
+}
+
+.react-flow__edge-path {
+  stroke-width: 1.5 !important;
+}
+
+.canvas-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  pointer-events: none;
+  text-align: center;
+}
+
+/* ── Right panel ─────────────────────────────────────────────────────────────── */
+.right-panel {
+  border-left: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Notebook panel ──────────────────────────────────────────────────────────── */
+.notebook-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.notebook-panel__header {
+  height: var(--panel-header-h);
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-default);
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+}
+
+.notebook-panel__header-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.notebook-panel__sync-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-valid);
+}
+
+.notebook-panel__editor {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Analysis panel ──────────────────────────────────────────────────────────── */
+.analysis-panel {
+  height: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+}
+
+.analysis-panel__tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-default);
+  flex-shrink: 0;
+  height: var(--panel-header-h);
+}
+
+.analysis-panel__tab {
+  padding: 0 12px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-right: 1px solid var(--border-default);
+  letter-spacing: 0.04em;
+  user-select: none;
+  transition: color 100ms ease;
+  gap: 5px;
+  background: transparent;
+  border-top: none;
+  border-left: none;
+  border-bottom: none;
+}
+.analysis-panel__tab:hover { color: var(--text-primary); }
+.analysis-panel__tab.active {
+  color: var(--text-primary);
+  border-bottom: 2px solid var(--border-focus);
+  margin-bottom: -1px;
+}
+
+.analysis-panel__badge {
+  background: var(--status-error);
+  color: white;
+  font-size: 9px;
+  font-weight: 600;
+  border-radius: 2px;
+  padding: 1px 4px;
+  min-width: 14px;
+  text-align: center;
+}
+
+.analysis-panel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.analysis-panel__body::-webkit-scrollbar { width: 4px; }
+.analysis-panel__body::-webkit-scrollbar-track { background: transparent; }
+.analysis-panel__body::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 2px; }
+
+.analysis-panel__empty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px 0;
+}
+
+.analysis-panel__ok-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-valid);
+  flex-shrink: 0;
+}
+
+/* ── MLM Node blocks ─────────────────────────────────────────────────────────── */
+.mlm-node {
+  width: 216px;
+  background: var(--bg-elevated);
+  border-radius: 3px;
+  position: relative;
+  font-family: var(--font-ui);
+  overflow: visible;
+}
+
+.mlm-node__left-strip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 3px 0 0 3px;
+}
+
+.mlm-node__content {
+  padding: 7px 10px 7px 13px;
+}
+
+.mlm-node__header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 3px;
+}
+
+.mlm-node__cat-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.mlm-node__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.mlm-node__shape {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.mlm-node__params {
+  font-size: 10px;
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  line-height: 1.5;
+}
+
+.mlm-node__param-entry {
+  white-space: nowrap;
+}
+
+/* Atomic badge — ◆ diamond top-right */
+.mlm-node__atomic-badge {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 11px;
+  color: var(--border-focus);
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* Untraceable badge — ? top-right */
+.mlm-node__unknown-badge {
+  position: absolute;
+  top: 5px;
+  right: 7px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--status-unknown);
+  color: #000;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* Input/Output node styles */
+.mlm-io-node {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 3px;
+  padding: 5px 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+  min-width: 80px;
+  font-family: var(--font-ui);
+}
+
+.mlm-io-node__shape {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  margin-top: 2px;
+}
+
+/* Function node (Add, residual) */
+.mlm-function-node {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 2px;
+  padding: 4px 10px;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.mlm-function-node__op {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+/* ── Shape edge pill ─────────────────────────────────────────────────────────── */
+.shape-edge-pill {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 2px;
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+  pointer-events: none;
+  white-space: nowrap;
+  user-select: none;
+  line-height: 1.4;
+}
+
+.shape-edge-pill--mismatch {
+  border-color: var(--status-error);
+  color: var(--status-error);
+}
+
+.shape-edge-pill--unknown {
+  color: var(--text-muted);
+}
+
+/* ── Animations ──────────────────────────────────────────────────────────────── */
+
+/* Mismatch wire glow — the only animation on edges, per the design spec */
+@keyframes mismatch-glow {
+  0%, 100% { filter: drop-shadow(0 0 0px #C0392B); }
+  50%       { filter: drop-shadow(0 0 4px #C0392B); }
+}
+
+/* Status dot pulse — fires on the titlebar dot in DEMO_MODE mismatch state */
+@keyframes pulse-error {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}

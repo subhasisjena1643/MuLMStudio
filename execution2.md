@@ -279,21 +279,21 @@ Record: PASS / FAIL / NOT IMPLEMENTED
 
 | Check | Expected | Result | Action Required |
 | --- | --- | --- | --- |
-| V1 — Backend health | All endpoints respond |  |  |
-| V2 — Trace d_model=512 | 0 unknown shapes |  |  |
-| V3 — Trace d_model=256 | 0 unknown shapes, 256 in shapes |  | Fix B1 if FAIL |
-| V4 — Mismatch detection | Error edges in backend response |  | Fix B2 if FAIL |
-| V5 — Export | Status 200, valid Python |  |  |
-| V6a — Console errors | 0 |  | Fix before anything else |
-| V6b — Notebook→canvas | Canvas updates |  |  |
-| V6c — Shape labels | Numbers, not [unknown] |  | Fix F1 if FAIL |
-| V6d — MHA ◆ badge | Badge visible |  |  |
-| V6e — PROBLEMS on mismatch | Error shown |  | Fix F2 if FAIL |
-| V6f — Canvas→notebook | Code appears |  | Note status |
-| V6g — Drill-down | Interior view |  | Note status |
-| V6h — Export button | File downloads |  |  |
-| V6i — Block deletion | Block + code removed |  | Note status |
-| V6j — Monaco highlight | Lines highlight |  | Note status |
+| V1 — Backend health | All endpoints respond | PASS | None |
+| V2 — Trace d_model=512 | 0 unknown shapes | PASS | None |
+| V3 — Trace d_model=256 | 0 unknown shapes, 256 in shapes | PASS | None (Skip B1) |
+| V4 — Mismatch detection | Error edges in backend response | FAIL | Fix B2 (Required) |
+| V5 — Export | Status 200, valid Python | PASS | None |
+| V6a — Console errors | 0 | TODO | Verify in browser |
+| V6b — Notebook→canvas | Canvas updates | TODO | Verify in browser |
+| V6c — Shape labels | Numbers, not [unknown] | TODO | Verify in browser |
+| V6d — MHA ◆ badge | Badge visible | TODO | Verify in browser |
+| V6e — PROBLEMS on mismatch | Error shown | TODO | Verify in browser |
+| V6f — Canvas→notebook | Code appears | TODO | Verify in browser |
+| V6g — Drill-down | Interior view | TODO | Verify in browser |
+| V6h — Export button | File downloads | TODO | Verify in browser |
+| V6i — Block deletion | Block + code removed | TODO | Verify in browser |
+| V6j — Monaco highlight | Lines highlight | TODO | Verify in browser |
 
 **STOP HERE. Fill in the table. Then proceed to Phase 1 based on results.**
 

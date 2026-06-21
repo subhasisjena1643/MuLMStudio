@@ -15,23 +15,7 @@ Deep learning researchers waste hours debugging silent PyTorch dimension crashes
 µLM Studio provides a real-time, bi-directional development canvas showing code and visual flow diagrams side-by-side. As you type, the FastAPI backend uses **`torch.fx` symbolic tracing** and `ShapeProp` to calculate actual tensor shapes. If a shape mismatch is detected, the connection wire glows red and generates an actionable debugging suggestion before a single line of training runs.
 
 ### System Architecture
-```mermaid
-graph TD
-    subgraph Frontend (React & Monaco Editor)
-        A[Monaco Code Editor] -- "Code (Debounced 300ms)" --> C[useTracer WebSocket Client]
-        D[React Flow Canvas] -- "Drag & Drop Blocks / Connections" --> E[useCodeGen Topological Sort]
-        E --> A
-    end
-    subgraph Backend (FastAPI & PyTorch)
-        C -- "WebSocket Stream" --> F[Tracer exec Sandbox]
-        F -- "Instantiate & Run" --> G[torch.fx Symbolic Tracing]
-        G --> H[ShapeProp Shape Inference]
-        H --> I[detect_mismatches.py Engine]
-        I -- "JSON Graph + Mismatch Logs" --> C
-    end
-```
-
----
+<img width="3546" height="2308" alt="image" src="https://github.com/user-attachments/assets/227b217b-2d4b-4c4a-b673-c23c6c397f76" />
 
 ## ⚙️ Setup & Run
 

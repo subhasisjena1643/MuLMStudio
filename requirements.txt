@@ -1,0 +1,16 @@
+# µLM Studio — Python backend dependencies
+# Pin PyTorch 2.3.x with CUDA 12.1 support to avoid version/platform conflicts.
+
+--extra-index-url https://download.pytorch.org/whl/cu121
+
+# ── Core ML ────────────────────────────────────────────────────────────────────
+torch==2.3.1+cu121
+torchvision==0.18.1+cu121
+
+# ── Backend / API ──────────────────────────────────────────────────────────────
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+websockets==12.0
+
+# ── Utilities ──────────────────────────────────────────────────────────────────
+pydantic==2.7.1              # FastAPI's data validation layer

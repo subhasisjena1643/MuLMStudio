@@ -118,6 +118,87 @@ function ProblemRow({ problem }) {
   const [expanded, setExpanded] = useState(false);
   const isError = problem.severity === 'error';
 
+  if (problem.type === 'shape_mismatch') {
+    return (
+      <div
+        style={{
+          padding: '8px 12px',
+          borderBottom: '1px solid #2C313C',
+          fontSize: 12,
+          transition: 'background 0.2s',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = '#1D2027'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: '#C0392B', fontWeight: 600, fontSize: 13 }}>⚠</span>
+            <span style={{
+              color: '#E4E6EB',
+              fontFamily: 'Inter, var(--font-sans), sans-serif',
+              fontWeight: 500,
+              fontSize: 13,
+            }}>
+              {problem.headline}
+            </span>
+          </div>
+          <button
+            onClick={() => console.log('Explain mismatch:', problem)}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              color: 'var(--text-accent, #5B8DB8)',
+              fontFamily: 'var(--font-sans)',
+              fontSize: 11,
+              fontWeight: 500,
+            }}
+          >
+            Explain ↗
+          </button>
+        </div>
+
+        <div style={{ paddingLeft: 18, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {/* Shapes comparison */}
+          <div style={{
+            fontFamily: "'JetBrains Mono', 'Fira Code', var(--font-mono), monospace",
+            fontSize: 12,
+            color: '#E4E6EB',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}>
+            <span>{problem.source_shape}</span>
+            <span style={{ color: 'var(--text-muted)' }}>→</span>
+            <span>{problem.target_shape}</span>
+          </div>
+
+          {/* Detail */}
+          <div style={{
+            fontFamily: 'Inter, var(--font-sans), sans-serif',
+            fontSize: 12,
+            color: '#7A8194',
+            lineHeight: 1.4,
+          }}>
+            {problem.detail}
+          </div>
+
+          {/* Suggestion */}
+          <div style={{
+            fontFamily: 'Inter, var(--font-sans), sans-serif',
+            fontSize: 12,
+            color: '#7A8194',
+            lineHeight: 1.4,
+            fontStyle: 'italic',
+          }}>
+            {problem.suggestion}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // message can be a plain string (from codeGen / demo) or
   // a structured { headline, traceback } object (from useTracer live errors).
   const msg = problem.message;

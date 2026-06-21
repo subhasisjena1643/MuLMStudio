@@ -134,7 +134,7 @@ def _explain_mismatch(
     dst_expected: str,
     src_last: int,
     dst_last: int,
-) -> str:
+) -> Tuple[str, str, str]:
     """
     Generate a one-sentence explanation tailored to the actual shapes.
     Falls back to a generic sentence when no specific pattern is detected.
@@ -171,7 +171,7 @@ def _explain_mismatch(
         f"\n"
         f"   Suggested fix: {suggestion}"
     )
-    return msg
+    return msg, explanation, suggestion
 
 
 def _explain_rank_mismatch(
@@ -181,7 +181,7 @@ def _explain_rank_mismatch(
     dst_label: str,
     dst_expected: str,
     dst_ndim: int,
-) -> str:
+) -> Tuple[str, str, str]:
     """Message when the *number* of dimensions disagrees."""
     explanation = (
         f"{src_label} outputs a {src_ndim}-D tensor but "
@@ -198,7 +198,7 @@ def _explain_rank_mismatch(
             f"Add an unsqueeze() or reshape between {src_label} and {dst_label} "
             f"to increase the tensor rank."
         )
-    return (
+    msg = (
         f"⚠  Shape Mismatch — {src_label} → {dst_label}\n"
         f"   {src_label} output:    {src_shape}\n"
         f"   {dst_label} expects:   {dst_expected}\n"
@@ -207,6 +207,7 @@ def _explain_rank_mismatch(
         f"\n"
         f"   Suggested fix: {suggestion}"
     )
+    return msg, explanation, suggestion
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -374,24 +375,37 @@ def detect_mismatches(graph_json: Dict[str, Any]) -> List[MismatchResult]:
                     a_label, b_label = labels[0], labels[1]
                     a_last,  b_last  = concrete[0], concrete[1]
 
+                    explanation = (
+                        f"The residual Add cannot combine tensors of size {a_last} "
+                        f"and {b_last} — both branches must have the same last dimension."
+                    )
+                    suggestion = (
+                        f"Ensure {a_label} and {b_label} both output "
+                        f"feature size {min(a_last, b_last)} (or whichever matches the "
+                        f"model's d_model), or remove the residual connection."
+                    )
                     msg = (
                         f"⚠  Shape Mismatch — {a_label} → Add ← {b_label}\n"
                         f"   {a_label} output:    {a_shape}\n"
                         f"   {b_label} output:    {b_shape}\n"
                         f"\n"
-                        f"   The residual Add cannot combine tensors of size {a_last} "
-                        f"and {b_last} — both branches must have the same last dimension.\n"
+                        f"   {explanation}\n"
                         f"\n"
-                        f"   Suggested fix: Ensure {a_label} and {b_label} both output "
-                        f"feature size {min(a_last, b_last)} (or whichever matches the "
-                        f"model's d_model), or remove the residual connection."
+                        f"   Suggested fix: {suggestion}"
                     )
                     results.append({
-                        "edge_id":   edge_id,
-                        "source_id": source_id,
-                        "target_id": target_id,
-                        "message":   msg,
-                        "severity":  "mismatch",
+                        "edge_id":      edge_id,
+                        "source_id":    source_id,
+                        "target_id":    target_id,
+                        "message":      msg,
+                        "severity":     "mismatch",
+                        "headline":     f"Shape Mismatch — {a_label} → Add ← {b_label}",
+                        "source_label": a_label,
+                        "target_label": b_label,
+                        "source_shape": a_shape,
+                        "target_shape": b_shape,
+                        "detail":       explanation,
+                        "suggestion":   suggestion,
                     })
             continue   # Add handled — move to next edge
 
@@ -402,22 +416,29 @@ def detect_mismatches(graph_json: Dict[str, Any]) -> List[MismatchResult]:
             # Unknown expectation — check rank at minimum
             dst_ndim = _ndim(dst_data.get("shape", ""))
             if src_ndim and dst_ndim and src_ndim != dst_ndim:
-                msg = _explain_rank_mismatch(
+                msg, explanation, suggestion = _explain_rank_mismatch(
                     src_label, src_shape, src_ndim,
                     dst_label, dst_data.get("shape", "?"), dst_ndim,
                 )
                 results.append({
-                    "edge_id":   edge_id,
-                    "source_id": source_id,
-                    "target_id": target_id,
-                    "message":   msg,
-                    "severity":  "mismatch",
+                    "edge_id":      edge_id,
+                    "source_id":    source_id,
+                    "target_id":    target_id,
+                    "message":      msg,
+                    "severity":     "mismatch",
+                    "headline":     f"Shape Mismatch — {src_label} → {dst_label}",
+                    "source_label": src_label,
+                    "target_label": dst_label,
+                    "source_shape": src_shape,
+                    "target_shape": dst_data.get("shape", "?"),
+                    "detail":       explanation,
+                    "suggestion":   suggestion,
                 })
             continue
 
         # ── Compare last-dim (feature axis) ──────────────────────────────────
         if src_last != expected_last:
-            msg = _explain_mismatch(
+            msg, explanation, suggestion = _explain_mismatch(
                 src_label=src_label,
                 src_shape=src_shape,
                 dst_label=dst_label,
@@ -426,11 +447,18 @@ def detect_mismatches(graph_json: Dict[str, Any]) -> List[MismatchResult]:
                 dst_last=expected_last,
             )
             results.append({
-                "edge_id":   edge_id,
-                "source_id": source_id,
-                "target_id": target_id,
-                "message":   msg,
-                "severity":  "mismatch",
+                "edge_id":      edge_id,
+                "source_id":    source_id,
+                "target_id":    target_id,
+                "message":      msg,
+                "severity":     "mismatch",
+                "headline":     f"Shape Mismatch — {src_label} → {dst_label}",
+                "source_label": src_label,
+                "target_label": dst_label,
+                "source_shape": src_shape,
+                "target_shape": expected_str,
+                "detail":       explanation,
+                "suggestion":   suggestion,
             })
 
     return results

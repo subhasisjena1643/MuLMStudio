@@ -31,10 +31,10 @@ const _CLEAN_NODES = [
   { id: "dropout",        type: "mlmNode",         position: { x: 0, y: 0 }, data: { label: "Dropout",                op: "call_module",   target: "dropout",        shape: "[2, 128, 512]",  sync_state: "traced", category: "REGULARIZATION", params: { p: 0.1 } } },
   { id: "add",            type: "mlmFunctionNode", position: { x: 0, y: 0 }, data: { label: "Add",                    op: "call_function", target: "<built-in function add>", shape: "[2, 128, 512]",  sync_state: "traced", category: "CORE",           params: {} } },
   { id: "norm1",          type: "mlmNode",         position: { x: 0, y: 0 }, data: { label: "LayerNorm",              op: "call_module",   target: "norm1",          shape: "[2, 128, 512]",  sync_state: "traced", category: "NORM",           params: { normalized_shape: [512] } } },
-  { id: "feedforward_0",  type: "mlmNode",         position: { x: 0, y: 0 }, data: { label: "feedforward.0  (Linear)", op: "call_module", target: "feedforward.0",  shape: "[2, 128, 2048]", sync_state: "traced", category: "CORE",           params: { in_features: 512,  out_features: 2048, bias: true } } },
-  { id: "feedforward_1",  type: "mlmNode",         position: { x: 0, y: 0 }, data: { label: "feedforward.1  (ReLU)",   op: "call_module", target: "feedforward.1",  shape: "[2, 128, 2048]", sync_state: "traced", category: "ACTIVATION",     params: {} } },
-  { id: "feedforward_2",  type: "mlmNode",         position: { x: 0, y: 0 }, data: { label: "feedforward.2  (Dropout)",op: "call_module", target: "feedforward.2",  shape: "[2, 128, 2048]", sync_state: "traced", category: "REGULARIZATION", params: { p: 0.1 } } },
-  { id: "feedforward_3",  type: "mlmNode",         position: { x: 0, y: 0 }, data: { label: "feedforward.3  (Linear)", op: "call_module", target: "feedforward.3",  shape: "[2, 128, 512]",  sync_state: "traced", category: "CORE",           params: { in_features: 2048, out_features: 512,  bias: true } } },
+  { id: "feedforward_0",  type: "mlmNode",         position: { x: 0, y: 0 }, data: { label: "Linear",                 op: "call_module", target: "feedforward.0",  shape: "[2, 128, 2048]", sync_state: "traced", category: "CORE",           params: { in_features: 512,  out_features: 2048, bias: true } } },
+  { id: "feedforward_1",  type: "mlmNode",         position: { x: 0, y: 0 }, data: { label: "ReLU",                   op: "call_module", target: "feedforward.1",  shape: "[2, 128, 2048]", sync_state: "traced", category: "ACTIVATION",     params: {} } },
+  { id: "feedforward_2",  type: "mlmNode",         position: { x: 0, y: 0 }, data: { label: "Dropout",                op: "call_module", target: "feedforward.2",  shape: "[2, 128, 2048]", sync_state: "traced", category: "REGULARIZATION", params: { p: 0.1 } } },
+  { id: "feedforward_3",  type: "mlmNode",         position: { x: 0, y: 0 }, data: { label: "Linear",                 op: "call_module", target: "feedforward.3",  shape: "[2, 128, 512]",  sync_state: "traced", category: "CORE",           params: { in_features: 2048, out_features: 512,  bias: true } } },
   { id: "dropout_1",      type: "mlmNode",         position: { x: 0, y: 0 }, data: { label: "Dropout",                op: "call_module",   target: "dropout",        shape: "[2, 128, 512]",  sync_state: "traced", category: "REGULARIZATION", params: { p: 0.1 } } },
   { id: "add_1",          type: "mlmFunctionNode", position: { x: 0, y: 0 }, data: { label: "Add",                    op: "call_function", target: "<built-in function add>", shape: "[2, 128, 512]",  sync_state: "traced", category: "CORE",           params: {} } },
   { id: "norm2",          type: "mlmNode",         position: { x: 0, y: 0 }, data: { label: "LayerNorm",              op: "call_module",   target: "norm2",          shape: "[2, 128, 512]",  sync_state: "traced", category: "NORM",           params: { normalized_shape: [512] } } },
@@ -127,6 +127,14 @@ export const DEMO_MISMATCH_MESSAGE = `\
 
    Suggested fix: Change Linear(2048, 768) → Linear(2048, 512) to restore the residual connection, or update the model dimension consistently throughout the block.`;
 
+export const DEMO_MISMATCH_STRUCTURED = {
+  headline: "Shape Mismatch — MultiheadAttention → FeedForward",
+  source_shape: "[2, 128, 512]",
+  target_shape: "[2, 128, 512]",
+  detail: "The FeedForward block output is [2, 128, 768] because its final Linear projects to 768 instead of 512 — the residual Add then receives tensors of incompatible sizes and cannot execute.",
+  suggestion: "Change Linear(2048, 768) → Linear(2048, 512) to restore the residual connection, or update the model dimension consistently throughout the block.",
+};
+
 // ── Notebook code constants ───────────────────────────────────────────────────
 
 /** The clean notebook code — what the user "typed" in the demo. */
@@ -188,3 +196,117 @@ class TransformerEncoderBlock(nn.Module):
         x = self.norm2(x + self.dropout(ff_out))  # ← shape mismatch here
         return x
 `;
+
+export const STATIC_MHA_INTERIOR = {
+  nodes: [
+    {
+      id: "mha_input",
+      type: "mlmInputNode",
+      position: { x: 300, y: 0 },
+      data: {
+        label: "Input (Q / K / V)",
+        op: "placeholder",
+        target: "input",
+        shape: "[batch, seq, 512]",
+        sync_state: "traced",
+        category: "INPUT",
+        params: { note: "Q, K, V are identical for self-attention" }
+      }
+    },
+    {
+      id: "mha_q_proj",
+      type: "mlmNode",
+      position: { x: 0, y: 160 },
+      data: {
+        label: "Q Projection",
+        op: "call_module",
+        target: "attention.q_proj_weight",
+        shape: "[batch, seq, 512]",
+        sync_state: "traced",
+        category: "CORE",
+        params: { in_features: 512, out_features: 512, note: "Linear (no bias by default)" }
+      }
+    },
+    {
+      id: "mha_k_proj",
+      type: "mlmNode",
+      position: { x: 300, y: 160 },
+      data: {
+        label: "K Projection",
+        op: "call_module",
+        target: "attention.k_proj_weight",
+        shape: "[batch, seq, 512]",
+        sync_state: "traced",
+        category: "CORE",
+        params: { in_features: 512, out_features: 512, note: "Linear (no bias by default)" }
+      }
+    },
+    {
+      id: "mha_v_proj",
+      type: "mlmNode",
+      position: { x: 600, y: 160 },
+      data: {
+        label: "V Projection",
+        op: "call_module",
+        target: "attention.v_proj_weight",
+        shape: "[batch, seq, 512]",
+        sync_state: "traced",
+        category: "CORE",
+        params: { in_features: 512, out_features: 512, note: "Linear (no bias by default)" }
+      }
+    },
+    {
+      id: "mha_sdpa",
+      type: "mlmNode",
+      position: { x: 300, y: 320 },
+      data: {
+        label: "Scaled Dot-Product Attention",
+        op: "call_function",
+        target: "F.scaled_dot_product_attention",
+        shape: "[batch, 8, seq, 64]",
+        sync_state: "traced",
+        category: "ATTENTION",
+        params: { formula: "softmax(QKᵀ / √d_k) · V", num_heads: 8, head_dim: 64, scale: "1 / √64 = 0.1250" }
+      }
+    },
+    {
+      id: "mha_out_proj",
+      type: "mlmNode",
+      position: { x: 300, y: 480 },
+      data: {
+        label: "Output Projection",
+        op: "call_module",
+        target: "attention.out_proj",
+        shape: "[batch, seq, 512]",
+        sync_state: "traced",
+        category: "CORE",
+        params: { in_features: 512, out_features: 512, bias: true }
+      }
+    },
+    {
+      id: "mha_output",
+      type: "mlmOutputNode",
+      position: { x: 300, y: 640 },
+      data: {
+        label: "Output",
+        op: "output",
+        target: "output",
+        shape: "[batch, seq, 512]",
+        sync_state: "traced",
+        category: "OUTPUT",
+        params: {}
+      }
+    }
+  ],
+  edges: [
+    { id: "mha_input→mha_q_proj", source: "mha_input", target: "mha_q_proj", type: "shapeEdge", data: { shape: "[batch, seq, 512]", status: "valid" } },
+    { id: "mha_input→mha_k_proj", source: "mha_input", target: "mha_k_proj", type: "shapeEdge", data: { shape: "[batch, seq, 512]", status: "valid" } },
+    { id: "mha_input→mha_v_proj", source: "mha_input", target: "mha_v_proj", type: "shapeEdge", data: { shape: "[batch, seq, 512]", status: "valid" } },
+    { id: "mha_q_proj→mha_sdpa", source: "mha_q_proj", target: "mha_sdpa", type: "shapeEdge", data: { shape: "[batch, seq, 512]", status: "valid" } },
+    { id: "mha_k_proj→mha_sdpa", source: "mha_k_proj", target: "mha_sdpa", type: "shapeEdge", data: { shape: "[batch, seq, 512]", status: "valid" } },
+    { id: "mha_v_proj→mha_sdpa", source: "mha_v_proj", target: "mha_sdpa", type: "shapeEdge", data: { shape: "[batch, seq, 512]", status: "valid" } },
+    { id: "mha_sdpa→mha_out_proj", source: "mha_sdpa", target: "mha_out_proj", type: "shapeEdge", data: { shape: "[batch, 8, seq, 64]", status: "valid" } },
+    { id: "mha_out_proj→mha_output", source: "mha_out_proj", target: "mha_output", type: "shapeEdge", data: { shape: "[batch, seq, 512]", status: "valid" } }
+  ]
+};
+

@@ -458,7 +458,7 @@ def graph_to_json(
         shape      = _get_shape(node)
         category   = _get_category(node, model)
         params     = _get_module_params(node, model)
-        label      = _get_label(node, model)
+        label      = get_display_label(node, dict(model.named_modules()))
 
         # Determine React Flow node type
         if node.op == "placeholder":

@@ -519,6 +519,8 @@ def _do_trace(
     except Exception:
         mismatches = []
 
+    graph_json["errors"] = mismatches
+
     # Stamp edges whose id appears in mismatches with status="mismatch"
     mismatch_edge_ids = {m["edge_id"] for m in mismatches}
     for edge in graph_json.get("edges", []):
@@ -979,18 +981,18 @@ if __name__ == "__main__":
     print(f"PyTorch  : {torch.__version__}")
     print(f"CUDA     : {torch.cuda.is_available()}")
     print(f"Endpoints:")
-    print("  WS   ws://localhost:8000/ws/trace")
-    print("  GET  http://localhost:8000/health")
-    print("  GET  http://localhost:8000/palette")
-    print("  GET  http://localhost:8000/demo")
-    print("  GET  http://localhost:8000/demo?view=mha_interior")
-    print("  POST http://localhost:8000/export")
+    print("  WS   ws://localhost:8002/ws/trace")
+    print("  GET  http://localhost:8002/health")
+    print("  GET  http://localhost:8002/palette")
+    print("  GET  http://localhost:8002/demo")
+    print("  GET  http://localhost:8002/demo?view=mha_interior")
+    print("  POST http://localhost:8002/export")
     print()
 
     uvicorn.run(
         "tracer:app",
         host="0.0.0.0",
-        port=8000,
+        port=8002,
         reload=False,      # disable reload — it doesn't play well with torch
         log_level="info",
     )

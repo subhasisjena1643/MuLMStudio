@@ -33,6 +33,8 @@ import {
   DEMO_MISMATCH_MESSAGE,
   DEMO_CODE_CLEAN,
   DEMO_CODE_MISMATCH,
+  STATIC_MHA_INTERIOR,
+  DEMO_MISMATCH_STRUCTURED,
 } from './data/staticDemoGraphs';
 
 const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
@@ -41,9 +43,11 @@ const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
 import { TEMPLATES } from './data/templates';
 export default function App() {
 
-  // ── Demo mode state ─────────────────────────────────────────────────────────
-  // mismatching: true = STATIC_GRAPH_MISMATCH displayed; false = CLEAN
   const [mismatching, setMismatching] = useState(false);
+
+  // ── Drill-down state ─────────────────────────────────────────────────────────
+  const [drilledPath, setDrilledPath] = useState(null);
+  const drilledPathRef = useRef(null);
 
   // ── Graph state ──────────────────────────────────────────────────────────────
   // In DEMO_MODE: always the static graph (toggled by Ctrl+Shift+E).
@@ -60,9 +64,54 @@ export default function App() {
   // Sync canvas when demo toggle changes
   useEffect(() => {
     if (!DEMO_MODE) return;
+    if (drilledPathRef.current) return;
     setCanvasNodes(activeStaticGraph.nodes);
     setCanvasEdges(activeStaticGraph.edges);
   }, [mismatching]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleDrillDown = useCallback(async (node) => {
+    if (node.data?.sync_state !== 'atomic') return;
+
+    const blockLabel = node.data?.label || 'MultiheadAttention';
+    setDrilledPath(blockLabel);
+    drilledPathRef.current = blockLabel;
+
+    if (DEMO_MODE) {
+      setCanvasNodes(STATIC_MHA_INTERIOR.nodes);
+      setCanvasEdges(STATIC_MHA_INTERIOR.edges);
+      return;
+    }
+
+    try {
+      const res = await fetch('http://localhost:8002/demo?view=mha_interior');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const interior = await res.json();
+      setCanvasNodes(interior.nodes);
+      setCanvasEdges(interior.edges);
+    } catch (err) {
+      console.error('Drill-down failed:', err);
+      setCanvasNodes(STATIC_MHA_INTERIOR.nodes);
+      setCanvasEdges(STATIC_MHA_INTERIOR.edges);
+    }
+  }, []);
+
+  const handleReturnToRoot = useCallback(() => {
+    setDrilledPath(null);
+    drilledPathRef.current = null;
+
+    if (DEMO_MODE) {
+      const activeStaticGraph = mismatching ? STATIC_GRAPH_MISMATCH : STATIC_GRAPH_CLEAN;
+      setCanvasNodes(activeStaticGraph.nodes);
+      setCanvasEdges(activeStaticGraph.edges);
+      return;
+    }
+
+    if (lastGraphRef.current) {
+      const rawNodes = lastGraphRef.current.nodes.map(({ position: _pos, ...rest }) => rest);
+      setCanvasNodes(rawNodes);
+      setCanvasEdges(lastGraphRef.current.edges);
+    }
+  }, [mismatching]);
 
   // The last graph received from the backend — used by the export endpoint
   const lastGraphRef = useRef({ nodes: STATIC_GRAPH_CLEAN.nodes, edges: STATIC_GRAPH_CLEAN.edges });
@@ -114,7 +163,12 @@ export default function App() {
 
   // In DEMO_MODE mismatch state → inject the pre-built hardcoded message
   const demoProblems = mismatching
-    ? [{ id: 'demo-mismatch', severity: 'error', message: DEMO_MISMATCH_MESSAGE }]
+    ? [{
+        id: 'demo-mismatch',
+        severity: 'error',
+        type: 'shape_mismatch',
+        ...DEMO_MISMATCH_STRUCTURED,
+      }]
     : [];
 
   const allProblems = DEMO_MODE
@@ -150,9 +204,11 @@ export default function App() {
     // can compute fresh positions from topology. If we pass {x:0,y:0} for every
     // node, dagre still runs but all nodes end up collapsed at the origin.
     const rawNodes = graph.nodes.map(({ position: _pos, ...rest }) => rest);
-    setCanvasNodes(rawNodes);
-    setCanvasEdges(graph.edges);
-    lastGraphRef.current = graph;
+    lastGraphRef.current = {
+      nodes: rawNodes,
+      edges: graph.edges,
+      errors: graph.errors,
+    };
     setTraceError(null);
 
     // Surface backend mismatches in the analysis panel
@@ -160,7 +216,8 @@ export default function App() {
       setLiveProblems(graph.mismatches.map((m) => ({
         id: m.edge_id,
         severity: 'error',
-        message: m.message,
+        type: 'shape_mismatch',
+        ...m
       })));
     } else {
       setLiveProblems([]);
@@ -171,6 +228,12 @@ export default function App() {
     setModelName(graph.model_name ?? firstCall?.data?.label ?? 'Live model');
     setIsTracing(false);
     clearTimeout(tracingTimerRef.current);
+
+    if (drilledPathRef.current) {
+      return;
+    }
+    setCanvasNodes(rawNodes);
+    setCanvasEdges(graph.edges);
   }, []);
 
   const handleTraceError = useCallback((msg) => {
@@ -263,7 +326,7 @@ export default function App() {
     }
 
     // Trigger the debounced WS trace
-    sendCode(template.code);
+    sendCode(template.code, template.inputShape);
   }, [sendCode]);
 
   const highlightBlockInEditor = useCallback((moduleTarget) => {
@@ -349,8 +412,8 @@ export default function App() {
     clearTimeout(tracingTimerRef.current);
     tracingTimerRef.current = setTimeout(() => setIsTracing(false), 5000);
 
-    sendCode(v);
-  }, [sendCode, pushHistory, canvasNodes, canvasEdges]);
+    sendCode(v, inputShape);
+  }, [sendCode, pushHistory, canvasNodes, canvasEdges, inputShape]);
 
   // ── Canvas drop handler (palette → canvas) ───────────────────────────────────
   const handleCanvasNodesChange = useCallback((nodes) => {
@@ -389,7 +452,7 @@ export default function App() {
         if (code && editorRef.current) {
           editorRef.current.setValue(code);
           liveCodeRef.current = code;
-          sendCode(code);
+          sendCode(code, inputShape);
         }
         highlightBlockInEditor(null);
         setSelectedNode(null);
@@ -398,7 +461,7 @@ export default function App() {
       });
       return nextNodes;
     });
-  }, [sendCode, highlightBlockInEditor, pushHistory, canvasNodes, canvasEdges]);
+  }, [sendCode, highlightBlockInEditor, pushHistory, canvasNodes, canvasEdges, inputShape]);
 
   // ── Edge deletion ────────────────────────────────────────────────────────
   const handleEdgesDelete = useCallback((deletedEdges) => {
@@ -412,12 +475,12 @@ export default function App() {
       if (code && editorRef.current) {
         editorRef.current.setValue(code);
         liveCodeRef.current = code;
-        sendCode(code);
+        sendCode(code, inputShape);
       }
       setCodeSource('canvas');
       return nextEdges;
     });
-  }, [sendCode, canvasNodes, canvasEdges, pushHistory]);
+  }, [sendCode, canvasNodes, canvasEdges, pushHistory, inputShape]);
 
   // ── Right-click context menu ──────────────────────────────────────────────
   // contextMenu: null | { node, x, y }
@@ -444,12 +507,13 @@ export default function App() {
       return;
     }
     try {
-      const resp = await fetch('http://localhost:8000/export', {
+      const resp = await fetch('http://localhost:8002/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           graph: lastGraphRef.current,
           code: notebookCode,
+          model_name: modelName,
         }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -564,6 +628,9 @@ export default function App() {
             highlightBlockInEditor(node.data?.target);
             setSelectedNode(node);
           }}
+          onNodeDoubleClick={handleDrillDown}
+          drilledPath={drilledPath}
+          onReturnToRoot={handleReturnToRoot}
           onPaneClick={() => {
             closeContextMenu();
             highlightBlockInEditor(null);

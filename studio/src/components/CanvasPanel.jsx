@@ -81,8 +81,11 @@ function CanvasPanelInner({
   onEdgesDelete,
   onNodeContextMenu,
   onNodeClick,
+  onNodeDoubleClick,
   onPaneClick,
   onSelectionChange,
+  drilledPath,
+  onReturnToRoot,
 }) {
   const { screenToFlowPosition, fitView } = useReactFlow();
 
@@ -194,6 +197,7 @@ function CanvasPanelInner({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
         onNodeContextMenu={onNodeContextMenu}
         onPaneClick={onPaneClick}
         onSelectionChange={onSelectionChange}
@@ -227,8 +231,29 @@ function CanvasPanelInner({
               fontFamily: 'var(--font-mono)',
               letterSpacing: '0.04em',
               userSelect: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
             }}>
-              {modelName ?? 'Model'} · {nodes.length} nodes
+              {drilledPath ? (
+                <>
+                  <span
+                    onClick={onReturnToRoot}
+                    style={{
+                      cursor: 'pointer',
+                      color: 'var(--text-accent, #5B8DB8)',
+                      fontWeight: 600,
+                      textDecoration: 'underline',
+                    }}
+                  >
+                    Root
+                  </span>
+                  <span>&gt;</span>
+                  <span style={{ color: 'var(--text-primary, #ffffff)' }}>{drilledPath}</span>
+                </>
+              ) : (
+                `${modelName ?? 'Model'} · ${nodes.length} nodes`
+              )}
             </div>
           </Panel>
         )}

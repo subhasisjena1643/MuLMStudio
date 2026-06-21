@@ -86,7 +86,7 @@ class TissueLLMCell(nn.Module):
         x = self.embedding(token_ids)
         x = self.norm(self.compress(x))
         x = x + self.process(x)
-        x = x + self.expand(x)
+        x = self.expand(x)
         return self.output_head(x)`
     }
 };

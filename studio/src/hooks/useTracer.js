@@ -15,9 +15,9 @@
  */
 import { useEffect, useRef, useCallback, useState } from 'react';
 
-const WS_URL = 'ws://localhost:8000/ws/trace';
-const DEBOUNCE_MS = 300;
-const RECONNECT_MS = 1000;
+const WS_URL        = 'ws://localhost:8002/ws/trace';
+const DEBOUNCE_MS   = 300;
+const RECONNECT_MS  = 1000;
 
 /**
  * useTracer(onGraph, onError)
@@ -93,6 +93,7 @@ export function useTracer(onGraph, onError, onLog) {
             ...e,
             type: e.type ?? 'shapeEdge',
           })),
+          errors: result.graph.errors ?? [],
           model_name: result.model_name,
           mismatches: result.mismatches ?? [],
           trace_time_ms: result.trace_time_ms,
@@ -156,15 +157,15 @@ export function useTracer(onGraph, onError, onLog) {
   }, [connect]);
 
   // ── sendCode — debounced 300ms ───────────────────────────────────────────────
-  const sendCode = useCallback((code) => {
+  const sendCode = useCallback((code, inputShape = null) => {
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN) {
-        // No input_shape sent — backend auto-detects from model structure
-        // (handles Transformer, CNN, Embedding models correctly)
-        ws.send(JSON.stringify({ code }));
-        onLogRef.current?.({ type: 'terminal', text: `→ SEND ${JSON.stringify({ code }).slice(0, 80)}…` });
+        const payload = { code };
+        if (inputShape) payload.input_shape = inputShape;
+        ws.send(JSON.stringify(payload));
+        onLogRef.current?.({ type: 'terminal', text: `→ SEND ${JSON.stringify(payload).slice(0, 80)}…` });
       }
       // If socket is not open, the update is silently dropped —
       // the reconnect loop will re-establish, and the next keystroke

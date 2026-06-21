@@ -486,7 +486,7 @@ html, body, #root {
 
 .mlm-node__shape {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.02em;
   color: var(--text-primary);
   margin-bottom: 4px;
@@ -592,7 +592,7 @@ html, body, #root {
   border-radius: 2px;
   padding: 2px 6px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.02em;
   color: var(--text-primary);
   pointer-events: none;
@@ -659,8 +659,15 @@ html, body, #root {
   color: #E4E6EB;
 }
 
-/* ── Tracing animation (titlebar badge) ──────────────────────────────────────── */
 @keyframes tracing-pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.35; }
+}
+
+.mulm-copilot-flash {
+  background: rgba(46, 204, 113, 0.18);
+  transition: background 0.4s ease;
+}
+.mulm-copilot-fade {
+  background: rgba(46, 204, 113, 0);
 }

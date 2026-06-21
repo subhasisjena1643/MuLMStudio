@@ -57,6 +57,7 @@ export default function NotebookPanel({
   onTemplateChange
 }) {
   const editorRef = useRef(null);
+  const monacoRef = useRef(null);
   const prevCodeRef = useRef(code);
   const fileInputRef  = useRef(null);
   const statusTimerRef = useRef(null);
@@ -125,10 +126,58 @@ export default function NotebookPanel({
     if (codeSource === 'user') return;
     const editor = editorRef.current;
     if (!editor) return;
-    if (editor.getValue() !== code) {
+    const oldValue = editor.getValue();
+    if (oldValue !== code) {
       const pos = editor.getPosition();
       editor.setValue(code ?? '');
       if (pos) editor.setPosition(pos);
+
+      // F9: Copilot Animation on Block Add (when change comes from canvas)
+      if (codeSource === 'canvas' && monacoRef.current) {
+        // Diff line by line
+        const oldLines = oldValue.split('\n');
+        const newLines = (code ?? '').split('\n');
+        
+        // Find line numbers of new lines (1-indexed)
+        const addedLineNumbers = [];
+        for (let i = 0; i < newLines.length; i++) {
+          const line = newLines[i];
+          if (!oldLines.includes(line) && line.trim().length > 0) {
+            addedLineNumbers.push(i + 1);
+          }
+        }
+
+        if (addedLineNumbers.length > 0) {
+          const monaco = monacoRef.current;
+          // Apply monaco decorations
+          const decorations = addedLineNumbers.map((lineNum) => ({
+            range: new monaco.Range(lineNum, 1, lineNum, 1),
+            options: {
+              isWholeLine: true,
+              className: 'mulm-copilot-flash',
+            },
+          }));
+
+          let decorationIds = editor.deltaDecorations([], decorations);
+
+          // After 1200ms: transition to fade style
+          setTimeout(() => {
+            const fadeDecorations = addedLineNumbers.map((lineNum) => ({
+              range: new monaco.Range(lineNum, 1, lineNum, 1),
+              options: {
+                isWholeLine: true,
+                className: 'mulm-copilot-fade',
+              },
+            }));
+            decorationIds = editor.deltaDecorations(decorationIds, fadeDecorations);
+          }, 1200);
+
+          // After 1600ms: clear decorations
+          setTimeout(() => {
+            editor.deltaDecorations(decorationIds, []);
+          }, 1600);
+        }
+      }
     }
   }, [code, codeSource]);
 
@@ -208,8 +257,9 @@ export default function NotebookPanel({
           language="python"
           defaultValue={code}
           onChange={onChange}
-          onMount={(editor) => {
+          onMount={(editor, monaco) => {
             editorRef.current = editor;
+            monacoRef.current = monaco;
             onEditorMount?.(editor);
           }}
           theme="mulm-dark"

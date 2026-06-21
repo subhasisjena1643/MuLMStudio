@@ -1,4 +1,4 @@
-# µLM Studio — Visual Graph & Shape Analyzer for PyTorch Models
+# µLM Studio — Visual Graph & Shape Analyzer for AI Models
 
 ## 📋 Problem Statement
 Deep learning researchers waste hours debugging silent PyTorch dimension crashes (e.g., `RuntimeError: mat1 and mat2 shapes cannot be multiplied`) that only manifest during runtime, sometimes hours into training. Traditional manual shape tracking in static code comments is error-prone, drifts quickly as parameters change, and lacks real-time mathematical validation.

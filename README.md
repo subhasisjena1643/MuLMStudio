@@ -1,42 +1,39 @@
 # µLM Studio — Visual Graph & Shape Analyzer for PyTorch Models
 
-µLM Studio is a real-time visual playground and debugging canvas for PyTorch models. Using **`torch.fx` symbolic tracing** and dynamic shape propagation, µLM Studio detects shape mismatches across deep learning layers (e.g., Attention to FeedForward projection errors) and reports them instantly, bridging the gap between code editor editing and graph-based canvas visualization.
+## 📋 Problem Statement
+Deep learning researchers waste hours debugging silent PyTorch dimension crashes (e.g., `RuntimeError: mat1 and mat2 shapes cannot be multiplied`) that only manifest during runtime, sometimes hours into training. Traditional manual shape tracking in static code comments is error-prone, drifts quickly as parameters change, and lacks real-time mathematical validation.
 
 ---
 
-## 🚀 Key Features
-
-* **Real-time `torch.fx` Tracing**: Evaluates arbitrary PyTorch `nn.Module` definitions via a FastAPI WebSocket backend as you type, rendering the execution graph dynamically.
-* **Intelligent Shape Mismatch Detection**: Walks the execution graph topology to compare upstream output shapes against downstream expected inputs. Provides exact error locations, visual annotations, and actionable suggested fixes.
-* **Interactive Node Canvas**: A premium React Flow canvas visualizing inputs, projections, multi-head attention layers, normalizations, and feedforward blocks.
-* **Bi-directional Synchronization**: Build graphs by dragging blocks onto the canvas to auto-generate clean PyTorch code, or edit code in the Monaco Editor to update the visual graph.
-* **Robust Error Handling**: Prevents application crashes on Python syntax or execution errors by capturing trace exceptions and displaying formatted backtrace diagnostics in the problems panel.
-* **Static Fallback Demo**: Toggle `VITE_DEMO_MODE` to showcase full canvas and mismatch debugging functionality entirely client-side, powered by a pre-compiled JSON graph.
+## 👥 Users & Context
+* **Target Users**: AI/ML researchers, deep learning engineers, model architects, and students designing custom neural networks (e.g., Transformers, CNNs, or hybrid bottleneck architectures like Tissue LLM cells).
+* **Context**: Used during the model prototyping phase, bridging the gap between text-based code editing and graphical flow visualization. It is particularly designed for fast iteration cycles where correct shape propagation is critical to prevent training-time execution failures.
 
 ---
 
-## 🛠 Project Structure
+## 💡 Solution Overview
+µLM Studio provides a real-time, bi-directional development canvas showing code and visual flow diagrams side-by-side. As you type, the FastAPI backend uses **`torch.fx` symbolic tracing** and `ShapeProp` to calculate actual tensor shapes. If a shape mismatch is detected, the connection wire glows red and generates an actionable debugging suggestion before a single line of training runs.
 
-```
-MuLMStudio/
-├── studio/                    # React Frontend
-│   ├── src/
-│   │   ├── components/        # CanvasPanel, NotebookPanel, PalettePanel, AnalysisPanel
-│   │   ├── hooks/             # useTracer (WS client), useCodeGen (Canvas to PyTorch)
-│   │   ├── nodes/             # Custom React Flow nodes
-│   │   └── index.css          # Core design system stylesheet
-│   └── package.json           # Frontend dependencies
-│
-├── tracer.py                  # FastAPI WebSocket & REST Server
-├── serializer.py              # PyTorch graph serialization (nodes & edges)
-├── detect_mismatches.py       # Shape mismatch engine
-├── requirements.txt           # Python packages (torch, fastapi, etc.)
-└── static_demo_graph.json     # Pre-rendered graph fallback
+### System Architecture
+```mermaid
+graph TD
+    subgraph Frontend (React & Monaco Editor)
+        A[Monaco Code Editor] -- "Code (Debounced 300ms)" --> C[useTracer WebSocket Client]
+        D[React Flow Canvas] -- "Drag & Drop Blocks / Connections" --> E[useCodeGen Topological Sort]
+        E --> A
+    end
+    subgraph Backend (FastAPI & PyTorch)
+        C -- "WebSocket Stream" --> F[Tracer exec Sandbox]
+        F -- "Instantiate & Run" --> G[torch.fx Symbolic Tracing]
+        G --> H[ShapeProp Shape Inference]
+        H --> I[detect_mismatches.py Engine]
+        I -- "JSON Graph + Mismatch Logs" --> C
+    end
 ```
 
 ---
 
-## ⚙️ Installation & Setup
+## ⚙️ Setup & Run
 
 ### Prerequisites
 * Python 3.10+
@@ -57,8 +54,9 @@ MuLMStudio/
    ```
 4. Start the backend tracing server:
    ```bash
-   python -m uvicorn tracer:app --host 127.0.0.1 --port 8000 --reload
+   python tracer.py
    ```
+   *(Runs on `http://127.0.0.1:8000`)*
 
 ### 2. Frontend Setup
 1. Navigate to the frontend directory:
@@ -69,76 +67,42 @@ MuLMStudio/
    ```bash
    npm install
    ```
-3. Set up environment variables. Create a `.env.local` inside the `studio` folder:
-   ```env
-   VITE_DEMO_MODE=false
-   ```
-   *(Set to `true` if you want to run the application purely frontend-only using preloaded graphs).*
-4. Start the development server:
+3. Start the dev server:
    ```bash
    npm run dev
    ```
+   *(Accessible at `http://localhost:5173`)*
+
+*Note: To run the application in a pure frontend-only environment using preloaded static graphs, create a `.env.local` inside the `studio/` folder with `VITE_DEMO_MODE=true`.*
 
 ---
 
-## 🔌 WebSocket Tracing Protocol
-
-The frontend communicates with the FastAPI backend over WebSockets (`ws://localhost:8000/ws/trace`):
-
-### Client Request Schema
-```json
-{
-  "code": "import torch...",
-  "input_shape": [2, 128, 512],
-  "input_dtype": "float32"
-}
-```
-
-### Server Response (Success)
-```json
-{
-  "status": "success",
-  "graph": {
-    "nodes": [
-      { "id": "x", "label": "input", "output_shape": [2, 128, 512] }
-    ],
-    "edges": [
-      { "id": "e1", "source": "x", "target": "linear" }
-    ]
-  },
-  "model_name": "TransformerEncoderBlock",
-  "trace_time_ms": 12.45
-}
-```
-
-### Server Response (Error)
-```json
-{
-  "status": "error",
-  "error": {
-    "phase": "parse",
-    "type": "SyntaxError",
-    "message": "invalid syntax",
-    "traceback": "..."
-  }
-}
-```
+## 📦 Models & Data
+* **Built-in Blocks**: Core blocks (Embedding, Linear, FeedForward, Output Head), Attention (Multi-Head Attention), Normalization (LayerNorm, RMSNorm), Vision (Conv2D), Regularization (Dropout), and Activation (Softmax).
+* **Starter Templates**: 
+  1. *Transformer Encoder Block*: Classic self-attention with residual paths.
+  2. *Simple CNN Classifier*: Visual feature extractor + avg pool classification pipeline.
+  3. *Tissue LLM Cell*: Compressed bottleneck architecture from the Tissue LLM project.
+* **Licenses & Sources**: Codebase is distributed under the MIT License. Built on top of PyTorch (BSD-3-Clause), React Flow (MIT/CC), and Monaco Editor (MIT). No external pre-trained model weights are required, as validation is performed statically on network architectures.
 
 ---
 
-## 💡 How Shape Mismatches are Caught
+## 🛡️ Evaluation & Guardrails
+* **Deterministic Verification (Anti-Hallucination)**: Unlike LLM-based code visualizers that estimate shapes and are prone to hallucinations, µLM Studio executes a deterministic, mathematics-based validation engine using PyTorch's native `torch.fx` and shape-propagation passes. Wires and shapes are mathematically guaranteed to match PyTorch's compiler outputs.
+* **Namespace Sandboxing (Code Injection Protection)**: To securely handle arbitrary Python scripts pasted by researchers, the backend restricts the execution environment namespace (`_safe_import` override) and blocks dangerous system modules (such as `os`, `subprocess`, `socket`, `shutil`, etc.).
 
-The backend runs a dedicated validator (`detect_mismatches.py`) which:
-1. Iterates over all graph edges.
-2. Compares the `output_shape` of the source block to the expected `input_shape` of the target block.
-3. Generates human-friendly warnings detailing the mismatch:
-   ```text
-   ⚠ Shape Mismatch — Attention → FeedForward
-     Attention output:    [2, 128, 768]
-     FeedForward expects:   [2, 128, 512]
+---
 
-     The Attention block projects features to a dimension of 768, but the FeedForward layer expects an input dimension of 512.
+## ⚠️ Known Limitations & Risks
+* **Dynamic Control Flow**: PyTorch models containing data-dependent control flow (e.g., `if x.sum() > 0:`) cannot be symbolically traced by `torch.fx` out-of-the-box. These blocks will fall back to "Untraceable" (`?` badge on canvas) unless custom mathematical contracts or wrappers are configured.
+* **Local Sandbox Limits**: The code execution sandbox is designed for local single-user research workloads and does not provide hypervisor-level isolation. Paste only trusted architectures.
 
-     Suggested fix: Change the input dimension of the FeedForward layer (d_model) to 768 or adjust the projection output of the Attention block.
-   ```
-4. The frontend intercepts these messages and highlights the offending nodes/edges on the Canvas.
+---
+
+## 👥 Team
+Developed during the **AIBoomi Startup Weekend, Bengaluru** (June 20–21, 2026).
+
+* **Founder / ML Researcher**: Led Tissue LLM architecture design, video storyboard, and product vision.
+* **Technical Lead**: Designed FastAPI symbolic tracer backend and deterministic shape-mismatch validator.
+* **Frontend Architect**: Developed React Flow canvas, Monaco Editor bi-directional sync, and custom theme layouts.
+* **Contact**: Submit questions or feedback via the GitHub Issues portal at the [MuLMStudio Repository](https://github.com/subhasisjena1643/MuLMStudio).

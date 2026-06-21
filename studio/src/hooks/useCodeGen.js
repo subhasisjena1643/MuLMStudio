@@ -360,8 +360,8 @@ export function generateCode(nodes, edges) {
     `        return ${returnExpr}`,
   ].join('\n');
 
-  const problems = unrecognized.map((label) => ({
-    id: `unrecognized-${label}`,
+  const problems = unrecognized.map((label, i) => ({
+    id: `unrecognized-${label}-${i}`,
     severity: 'warning',
     message: `Block "${label}" has no code template — emitted as # TODO placeholder.`,
   }));

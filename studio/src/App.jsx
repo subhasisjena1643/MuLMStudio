@@ -55,10 +55,10 @@ export default function App() {
   const activeStaticGraph = mismatching ? STATIC_GRAPH_MISMATCH : STATIC_GRAPH_CLEAN;
 
   const [canvasNodes, setCanvasNodes] = useState(
-    DEMO_MODE ? activeStaticGraph.nodes : STATIC_GRAPH_CLEAN.nodes,
+    DEMO_MODE ? activeStaticGraph.nodes : [],
   );
   const [canvasEdges, setCanvasEdges] = useState(
-    DEMO_MODE ? activeStaticGraph.edges : STATIC_GRAPH_CLEAN.edges,
+    DEMO_MODE ? activeStaticGraph.edges : [],
   );
 
   // Sync canvas when demo toggle changes
@@ -114,10 +114,10 @@ export default function App() {
   }, [mismatching]);
 
   // The last graph received from the backend — used by the export endpoint
-  const lastGraphRef = useRef({ nodes: STATIC_GRAPH_CLEAN.nodes, edges: STATIC_GRAPH_CLEAN.edges });
+  const lastGraphRef = useRef({ nodes: [], edges: [] });
 
   // Track the model name for the canvas badge
-  const [modelName, setModelName] = useState('TransformerEncoderBlock');
+  const [modelName, setModelName] = useState('');
 
   // ── Notebook code state ──────────────────────────────────────────────────────
   // liveCode is a REF, not state — user keystrokes must NEVER trigger a re-render.
@@ -258,6 +258,19 @@ export default function App() {
     handleLog,
   );
 
+  // ── Initial trace on first WS connection ─────────────────────────────────────
+  // Fire once when the socket first opens so the canvas immediately shows the
+  // architecture for the default template (tissue_llm) instead of the old
+  // hard-coded static Transformer Encoder stub.
+  const initialTraceSentRef = useRef(false);
+  useEffect(() => {
+    if (DEMO_MODE) return;
+    if (wsStatus !== 'open') return;
+    if (initialTraceSentRef.current) return;
+    initialTraceSentRef.current = true;
+    sendCode(liveCodeRef.current, TEMPLATES.tissue_llm.inputShape);
+  }, [wsStatus, sendCode]);
+
   // ── Monaco node-click highlight ───────────────────────────────────────────────
   const editorRef = useRef(null);
   const decorationIdsRef = useRef([]);
@@ -268,6 +281,12 @@ export default function App() {
   const historyRef          = useRef([]);
   const codeHistoryTimerRef = useRef(null); // debounce for text-change pushes
   const MAX_HISTORY = 50;
+
+  // ── Programmatic-change guard ────────────────────────────────────────────
+  // Set to true before calling editorRef.setValue() imperatively so that the
+  // Monaco onChange → handleCodeChange path is skipped. This prevents the
+  // stale-inputShape race that breaks template switching after clearing canvas.
+  const suppressOnChangeRef = useRef(false);
 
   const pushHistory = useCallback((nodes, edges, code) => {
     historyRef.current = [
@@ -321,11 +340,16 @@ export default function App() {
 
     // Force Monaco to show the new code immediately (imperative API —
     // avoids a full re-render cycle and cursor-reset side-effects).
+    // Suppress the resulting onChange so handleCodeChange doesn't fire with
+    // a stale inputShape — we send the WS trace explicitly below with the
+    // correct shape from the template object (not from React state).
     if (editorRef.current) {
+      suppressOnChangeRef.current = true;
       editorRef.current.setValue(template.code);
+      suppressOnChangeRef.current = false;
     }
 
-    // Trigger the debounced WS trace
+    // Trigger the debounced WS trace with the correct (fresh) inputShape
     sendCode(template.code, template.inputShape);
   }, [sendCode]);
 
@@ -385,6 +409,11 @@ export default function App() {
   // ── Monaco change handler ────────────────────────────────────────────────────
   const handleCodeChange = useCallback((value) => {
     if (DEMO_MODE) return;   // notebook is read-only in demo mode
+    // Skip when this onChange was triggered by a programmatic setValue() call
+    // (e.g. template switch) — we handle the WS send explicitly there with
+    // the correct inputShape. Without this guard the stale React state value
+    // of inputShape would be used, causing a wrong/failed trace.
+    if (suppressOnChangeRef.current) return;
     const v = value ?? '';
 
     // Clear canvas immediately when code becomes empty — no need to wait for

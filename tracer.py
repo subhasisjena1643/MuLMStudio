@@ -347,25 +347,37 @@ def _infer_dummy_input(
     Produce a dummy input tensor suitable for ShapeProp on `model`.
 
     Priority:
-      1. Use requested_shape + requested_dtype if provided by client.
-      2. Detect model structure:
-         - Contains nn.Embedding → int64 [2, 128]
-         - Contains nn.Conv2d   → float32 [2, C_in, 32, 32]
-         - Default              → float32 [2, 128, 512]  (transformer-style)
+      1. Use requested_dtype if explicitly provided by client.
+      2. Auto-detect dtype from model structure (Embedding → int64, else float32).
+         This step runs even when requested_shape is provided — the caller's shape
+         is used, but we still check whether the model needs an integer tensor.
+         This prevents ShapeProp from failing with "Expected Long/Int, got Float"
+         when the frontend passes a shape like [2, 128] from a previous template
+         while the newly uploaded model contains nn.Embedding.
+      3. Fall back to auto-detect shape when no shape is provided.
 
     Returns a zero/randn tensor on CPU.
     """
     import inspect
 
-    dtype = _dtype_from_string(requested_dtype or "float32")
+    # ── Step 1: resolve dtype ─────────────────────────────────────────────────
+    if requested_dtype:
+        # Caller was explicit — honour it exactly.
+        dtype = _dtype_from_string(requested_dtype)
+    else:
+        # Auto-detect from model structure so models with nn.Embedding always
+        # receive an integer tensor regardless of what shape the frontend sent.
+        has_embedding = any(isinstance(m, nn.Embedding) for m in model.modules())
+        dtype = torch.int64 if has_embedding else torch.float32
 
+    # ── Step 2: resolve shape ─────────────────────────────────────────────────
     if requested_shape:
         shape = requested_shape
         if dtype == torch.int64:
             return torch.zeros(shape, dtype=torch.int64)
         return torch.randn(shape, dtype=dtype)
 
-    # ── Auto-detect from model structure ─────────────────────────────────────
+    # ── Auto-detect shape from model structure ────────────────────────────────
     has_embedding = any(isinstance(m, nn.Embedding) for m in model.modules())
     conv2d_modules = [m for m in model.modules() if isinstance(m, nn.Conv2d)]
 
@@ -406,6 +418,7 @@ def _infer_dummy_input(
 
     # Default: 3-D transformer-style input
     return torch.randn(2, 128, 512)
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────

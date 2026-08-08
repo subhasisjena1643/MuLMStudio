@@ -56,6 +56,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import httpx
 import torch
 import torch.nn as nn
 import torch.fx as fx
@@ -69,6 +70,14 @@ from pydantic import BaseModel
 from serializer import graph_to_json, build_mha_interior_view
 from detect_mismatches import detect_mismatches, DEMO_MISMATCH_ATTENTION_FEEDFORWARD
 
+# Load a root .env file if present (local dev convenience). In real
+# deployments the platform injects env vars directly and this is a no-op.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # ─────────────────────────────────────────────────────────────────────────────
 # App setup
 # ─────────────────────────────────────────────────────────────────────────────
@@ -79,16 +88,26 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# Deployed frontend origins go in ALLOWED_ORIGINS (comma-separated env var) —
+# e.g. "https://your-app.vercel.app" — rather than hardcoded here, so pointing
+# the frontend at a new deploy URL doesn't require a code change.
+_LOCAL_DEV_ORIGINS = [
+    "http://localhost:5173",   # Vite dev server default
+    "http://localhost:4173",   # `vite preview` default — serves the production build
+    "http://localhost:3000",   # CRA / alternate
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:4173",
+    "http://127.0.0.1:3000",
+]
+_EXTRA_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",   # Vite dev server default
-        "http://localhost:4173",   # `vite preview` default — serves the production build
-        "http://localhost:3000",   # CRA / alternate
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:4173",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=_LOCAL_DEV_ORIGINS + _EXTRA_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -902,6 +921,60 @@ async def health() -> JSONResponse:
     })
 
 
+class ClaudeMessageRequest(BaseModel):
+    """Mirrors the subset of the Anthropic Messages API the frontend needs."""
+    system:     str
+    messages:   List[Dict[str, Any]]
+    model:      str = "claude-opus-4-8"
+    max_tokens: int = 1024
+
+
+_ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages"
+
+
+@app.post("/claude/messages")
+async def claude_messages(req: ClaudeMessageRequest) -> JSONResponse:
+    """
+    Server-side proxy to the Anthropic API.
+
+    The frontend's useClaude.js hook calls this instead of api.anthropic.com
+    directly — the API key lives only in this process's environment
+    (ANTHROPIC_API_KEY, set on whatever host runs this backend), so it is
+    never bundled into the browser-shipped JS the way a VITE_-prefixed
+    variable would be.
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return JSONResponse(
+            {"error": "ANTHROPIC_API_KEY is not configured on the server."},
+            status_code=500,
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                _ANTHROPIC_MESSAGES_URL,
+                headers={
+                    "x-api-key":         api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type":      "application/json",
+                },
+                json={
+                    "model":      req.model,
+                    "max_tokens": req.max_tokens,
+                    "system":     req.system,
+                    "messages":   req.messages,
+                },
+            )
+    except httpx.RequestError as exc:
+        return JSONResponse(
+            {"error": f"Could not reach the Anthropic API: {exc}"},
+            status_code=502,
+        )
+
+    return JSONResponse(resp.json(), status_code=resp.status_code)
+
+
 @app.get("/palette")
 async def palette() -> JSONResponse:
     """
@@ -1189,22 +1262,28 @@ if __name__ == "__main__":
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     import uvicorn
 
+    # Most PaaS hosts (Render, Railway, Fly.io, ...) inject $PORT and expect
+    # the app to bind to it — fall back to 8002 for local dev.
+    _port = int(os.environ.get("PORT", "8002"))
+
     print("µLM Studio — Tracer Backend")
     print(f"PyTorch  : {torch.__version__}")
     print(f"CUDA     : {torch.cuda.is_available()}")
-    print(f"Endpoints:")
-    print("  WS   ws://localhost:8002/ws/trace")
-    print("  GET  http://localhost:8002/health")
-    print("  GET  http://localhost:8002/palette")
-    print("  GET  http://localhost:8002/demo")
-    print("  GET  http://localhost:8002/demo?view=mha_interior")
-    print("  POST http://localhost:8002/export")
+    print(f"Claude proxy configured: {'yes' if os.environ.get('ANTHROPIC_API_KEY') else 'NO — set ANTHROPIC_API_KEY'}")
+    print(f"Endpoints (port {_port}):")
+    print(f"  WS   ws://localhost:{_port}/ws/trace")
+    print(f"  GET  http://localhost:{_port}/health")
+    print(f"  GET  http://localhost:{_port}/palette")
+    print(f"  GET  http://localhost:{_port}/demo")
+    print(f"  GET  http://localhost:{_port}/demo?view=mha_interior")
+    print(f"  POST http://localhost:{_port}/export")
+    print(f"  POST http://localhost:{_port}/claude/messages")
     print()
 
     uvicorn.run(
         "tracer:app",
         host="0.0.0.0",
-        port=8002,
+        port=_port,
         reload=False,      # disable reload — it doesn't play well with torch
         log_level="info",
     )

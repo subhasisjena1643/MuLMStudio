@@ -1,30 +1,22 @@
 import { useCallback, useState } from 'react';
+import { BACKEND_URL } from '../config';
 
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+// Routed through tracer.py's /claude/messages proxy instead of calling
+// api.anthropic.com directly — the API key lives only in the backend's
+// environment (ANTHROPIC_API_KEY), so it's never bundled into the browser
+// JS the way a VITE_-prefixed variable would be. See tracer.py.
+const CLAUDE_PROXY_URL = `${BACKEND_URL}/claude/messages`;
 
 export function useClaude() {
   const [isLoading, setIsLoading] = useState(false);
   const [lastResponse, setLastResponse] = useState(null);
 
   const askClaude = useCallback(async (systemPrompt, userMessage) => {
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return {
-        ok: false,
-        text: 'Claude API key not configured. Set VITE_ANTHROPIC_API_KEY in .env.local'
-      };
-    }
-
     setIsLoading(true);
     try {
-      const response = await fetch(ANTHROPIC_API_URL, {
+      const response = await fetch(CLAUDE_PROXY_URL, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'claude-opus-4-8',
           max_tokens: 1024,
@@ -34,6 +26,12 @@ export function useClaude() {
       });
 
       const data = await response.json();
+
+      if (!response.ok) {
+        setIsLoading(false);
+        return { ok: false, text: data.error || `Claude proxy error (HTTP ${response.status}).` };
+      }
+
       const text = data.content
         ?.filter(block => block.type === 'text')
         .map(block => block.text)
@@ -44,7 +42,7 @@ export function useClaude() {
       return { ok: true, text };
     } catch (err) {
       setIsLoading(false);
-      return { ok: false, text: `Claude API error: ${err.message}` };
+      return { ok: false, text: `Could not reach the Claude proxy: ${err.message}` };
     }
   }, []);
 

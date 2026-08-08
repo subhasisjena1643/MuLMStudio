@@ -28,6 +28,7 @@ import AnalysisPanel from './components/AnalysisPanel';
 import { useTracer } from './hooks/useTracer';
 import { useCodeGen, generateCode } from './hooks/useCodeGen';
 import { useClaude } from './hooks/useClaude';
+import { BACKEND_URL } from './config';
 import {
   STATIC_GRAPH_CLEAN,
   STATIC_GRAPH_MISMATCH,
@@ -86,7 +87,7 @@ export default function App() {
     }
 
     try {
-      const res = await fetch('http://localhost:8002/demo?view=mha_interior');
+      const res = await fetch(`${BACKEND_URL}/demo?view=mha_interior`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const interior = await res.json();
       setCanvasNodes(interior.nodes);
@@ -586,7 +587,7 @@ export default function App() {
       return;
     }
     try {
-      const resp = await fetch('http://localhost:8002/export', {
+      const resp = await fetch(`${BACKEND_URL}/export`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

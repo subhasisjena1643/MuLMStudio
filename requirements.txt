@@ -11,6 +11,8 @@ torchvision==0.18.1+cu121
 fastapi==0.111.0
 uvicorn[standard]==0.29.0
 websockets==12.0
+httpx==0.28.1                # server-side proxy to the Anthropic API
 
 # ── Utilities ──────────────────────────────────────────────────────────────────
 pydantic==2.7.1              # FastAPI's data validation layer
+python-dotenv==1.2.2          # loads .env for local dev (no-op in real deployments)

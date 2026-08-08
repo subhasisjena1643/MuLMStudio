@@ -14,8 +14,9 @@
  * on error so the canvas is never blanked by a transient drop.
  */
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { WS_TRACE_URL } from '../config';
 
-const WS_URL        = 'ws://localhost:8002/ws/trace';
+const WS_URL        = WS_TRACE_URL;
 const DEBOUNCE_MS   = 300;
 const RECONNECT_MS  = 1000;
 

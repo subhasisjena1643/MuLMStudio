@@ -9,6 +9,10 @@ __pycache__/
 htmlcov/
 .mypy_cache/
 
+# Backend secrets (server-side ANTHROPIC_API_KEY, ALLOWED_ORIGINS, etc.)
+.env
+.env.local
+
 # Node / Frontend
 studio/node_modules/
 studio/dist/

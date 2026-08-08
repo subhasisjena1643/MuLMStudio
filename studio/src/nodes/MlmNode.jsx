@@ -39,6 +39,19 @@ export default function MlmNode({ data, selected }) {
             ))}
           </div>
         )}
+
+        {data.in_place_warning && (
+          <div style={{
+            fontSize: '9px',
+            color: '#B8860B',
+            fontFamily: 'var(--font-mono)',
+            padding: '2px 6px',
+            borderTop: '1px solid rgba(184,134,11,0.2)',
+            marginTop: '2px'
+          }}>
+            ⚠ {data.in_place_warning}
+          </div>
+        )}
       </div>
 
       <Handle type="target" position={Position.Top} style={{ borderColor: withAlpha(color, 0.6) }} />

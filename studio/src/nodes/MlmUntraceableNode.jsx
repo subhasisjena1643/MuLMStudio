@@ -55,7 +55,7 @@ export default function MlmUntraceableNode({ data, selected }) {
           fontFamily: 'var(--font-mono)',
           letterSpacing: '0.04em',
         }}>
-          untraceable · shapes estimated
+          {data.degradation_reason || "graph break · data-dependent control flow"}
         </div>
       </div>
 

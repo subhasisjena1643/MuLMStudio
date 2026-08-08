@@ -54,7 +54,7 @@ export default function MlmAtomicNode({ data, selected }) {
           fontFamily: 'var(--font-mono)',
           letterSpacing: '0.04em',
         }}>
-          atomic primitive · double-click to inspect
+          {data.degradation_reason || "atomic primitive · double-click to inspect"}
         </div>
       </div>
 

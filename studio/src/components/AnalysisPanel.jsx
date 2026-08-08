@@ -11,6 +11,7 @@
  *   { id, severity: 'error'|'warn', message: string | { headline, traceback } }
  */
 import { useState } from 'react';
+import { useClaude } from '../hooks/useClaude';
 
 const TABS = ['PROBLEMS', 'OUTPUT', 'DEBUG', 'TERMINAL'];
 
@@ -57,7 +58,7 @@ export default function AnalysisPanel({ problems = [], outputLog = [], terminalL
           ) : (
             <div style={{ fontFamily: "'JetBrains Mono','Consolas',monospace", fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
               {outputLog.map((e) => (
-                <div key={e.id} style={{ color: e.isError ? 'var(--status-error)' : 'var(--text-muted)', whiteSpace: 'pre', lineHeight: 1.5 }}>
+                <div key={e.id} style={{ color: e.isError ? 'var(--status-error)' : 'var(--text-muted)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
                   {e.text}
                 </div>
               ))}
@@ -116,6 +117,8 @@ export default function AnalysisPanel({ problems = [], outputLog = [], terminalL
 
 function ProblemRow({ problem }) {
   const [expanded, setExpanded] = useState(false);
+  const { explainMismatch, isLoading: claudeLoading } = useClaude();
+  const [explanations, setExplanations] = useState({});
   const isError = problem.severity === 'error';
 
   if (problem.type === 'shape_mismatch') {
@@ -143,7 +146,12 @@ function ProblemRow({ problem }) {
             </span>
           </div>
           <button
-            onClick={() => console.log('Explain mismatch:', problem)}
+            onClick={async () => {
+              const key = problem.edge_id || problem.headline || problem.id;
+              setExplanations(prev => ({ ...prev, [key]: { loading: true } }));
+              const result = await explainMismatch(problem);
+              setExplanations(prev => ({ ...prev, [key]: { loading: false, text: result.text } }));
+            }}
             style={{
               background: 'none',
               border: 'none',
@@ -155,7 +163,7 @@ function ProblemRow({ problem }) {
               fontWeight: 500,
             }}
           >
-            Explain ↗
+            {claudeLoading ? '⏳ Asking Claude…' : 'Ask Claude ↗'}
           </button>
         </div>
 
@@ -194,6 +202,26 @@ function ProblemRow({ problem }) {
           }}>
             {problem.suggestion}
           </div>
+
+          {/* Claude diagnosis */}
+          {explanations[problem.edge_id || problem.headline || problem.id] && (
+            <div style={{
+              marginTop: '6px',
+              padding: '8px 10px',
+              background: 'rgba(61, 122, 86, 0.08)',
+              border: '1px solid rgba(61, 122, 86, 0.2)',
+              borderRadius: '3px',
+              fontSize: '11px',
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--text-primary)',
+              lineHeight: '1.5',
+              whiteSpace: 'pre-wrap'
+            }}>
+              {explanations[problem.edge_id || problem.headline || problem.id].loading
+                ? '⏳ Claude is analyzing the shape mismatch…'
+                : explanations[problem.edge_id || problem.headline || problem.id].text}
+            </div>
+          )}
         </div>
       </div>
     );

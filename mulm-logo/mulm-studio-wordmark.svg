@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 160" width="380" height="160">
+  <title>MuLM Studio</title>
+  <desc>MuLM Studio logo with wordmark and tagline</desc>
+  <circle cx="38" cy="40" r="13" fill="none" stroke="#1B4F99" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="82" cy="40" r="13" fill="none" stroke="#1B4F99" stroke-width="3" stroke-linecap="round"/>
+  <path d="M38 27 Q60 2 82 27" fill="none" stroke="#1B4F99" stroke-width="3" stroke-linecap="round"/>
+  <path d="M38 53 L38 118 Q38 132 22 132" fill="none" stroke="#1B4F99" stroke-width="3" stroke-linecap="round"/>
+  <path d="M82 53 L82 118" fill="none" stroke="#1B4F99" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="38" cy="40" r="6" fill="#1B4F99"/>
+  <circle cx="82" cy="40" r="6" fill="#1B4F99"/>
+  <circle cx="82" cy="131" r="13" fill="#1B4F99"/>
+  <text x="118" y="95" font-family="system-ui, -apple-system, Helvetica Neue, sans-serif" font-size="60" font-weight="600" letter-spacing="-1.5" fill="#1B4F99">MuLM</text>
+  <text x="120" y="130" font-family="system-ui, -apple-system, Helvetica Neue, sans-serif" font-size="22" font-weight="400" letter-spacing="5" fill="#1B4F99">STUDIO</text>
+</svg>

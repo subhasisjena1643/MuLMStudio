@@ -11,7 +11,7 @@
 
 Before a single line of code is written, every person on the team reads and agrees on this:
 
-> **µLM Studio is the Cadence/Simulink of machine learning. A professional-grade local studio where researchers design, validate, and export any ML architecture visually — with synchronized multi-layer views, live tensor shape propagation, and real-time error detection. The prototype is the first glimpse of that studio. Not a toy. Not a demo. A real tool showing a real vision.**
+> **µLM Studio is a local, PyTorch-native playground-lab with a built-in numerical correctness layer. Paste your real PyTorch code — the model draws itself as you type, and one click tells you whether your values are actually right. A professional-grade local studio where researchers write, paste, or import any real PyTorch beside a canvas that renders what that code is, live, via graph-break tracing that never refuses your code and never lies about what it couldn't trace — with synchronized multi-layer views, live tensor shape propagation, and real-time error detection. The prototype is the first glimpse of that studio. Not a toy. Not a demo. A real tool showing a real vision.**
 
 Every build decision this week is measured against that statement. If a feature doesn't serve it, it doesn't get built. If a feature serves it but there's no time, it gets cut cleanly — not half-built.
 

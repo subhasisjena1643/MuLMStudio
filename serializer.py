@@ -471,19 +471,35 @@ def graph_to_json(
             # call_module — use sync_state
             rf_type = _RF_TYPE_FOR_SYNC_STATE.get(sync_state, "mlmNode")
 
+        node_data: Dict[str, Any] = {
+            "label":      label,
+            "op":         node.op,
+            "target":     str(node.target),
+            "shape":      shape,
+            "sync_state": sync_state,
+            "category":   category,
+            "params":     params,
+        }
+
+        if sync_state == "atomic":
+            node_data["degradation_reason"] = "atomic primitive — internal structure opaque to symbolic trace"
+        elif sync_state == "untraceable":
+            node_data["degradation_reason"] = "module not found in traced graph — likely data-dependent control flow"
+
+        if node.op in ("call_function", "call_method"):
+            target_name = getattr(node.target, "__name__", str(node.target))
+            in_place_substrings = ("add_", "mul_", "copy_", "fill_", "zero_", "masked_fill_", "scatter_")
+            is_in_place = any(s in target_name for s in in_place_substrings) or (
+                target_name.endswith("_") and not target_name.endswith("__")
+            )
+            if is_in_place:
+                node_data["in_place_warning"] = "in-place mutation detected — trace may not reflect aliasing"
+
         rf_nodes.append({
             "id":       node.name,
             "type":     rf_type,
             "position": {"x": 0, "y": 0},   # frontend handles layout (Dagre / ELK)
-            "data": {
-                "label":      label,
-                "op":         node.op,
-                "target":     str(node.target),
-                "shape":      shape,
-                "sync_state": sync_state,
-                "category":   category,
-                "params":     params,
-            },
+            "data":     node_data,
         })
         node_id_set.add(node.name)
 

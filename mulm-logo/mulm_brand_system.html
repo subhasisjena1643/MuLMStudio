@@ -1,0 +1,355 @@
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Inter+Tight:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+.brand-sheet {
+  font-family: 'Inter', system-ui, sans-serif;
+  color: #111;
+  padding: 40px 0 40px;
+  max-width: 640px;
+}
+
+.section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: #1B4F99;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e0e7f3;
+}
+
+.divider {
+  height: 1px;
+  background: #e8eaf0;
+  margin: 36px 0;
+}
+
+/* ── COLOR SYSTEM ── */
+.color-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.swatch-group { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+.swatch {
+  width: 52px; height: 52px; border-radius: 8px;
+  border: 0.5px solid rgba(0,0,0,0.08);
+}
+.swatch.large { width: 80px; height: 80px; border-radius: 10px; }
+.swatch-hex { font-size: 10px; color: #666; font-family: 'JetBrains Mono', monospace; letter-spacing: -0.3px; }
+.swatch-name { font-size: 10px; color: #999; font-family: 'Inter', sans-serif; }
+
+.color-block {
+  display: flex; gap: 16px; align-items: flex-start; margin-bottom: 20px;
+}
+.color-meta { display: flex; flex-direction: column; gap: 2px; padding-top: 4px; }
+.color-meta strong { font-size: 13px; font-weight: 500; color: #111; }
+.color-meta span { font-size: 12px; color: #666; }
+.color-meta code { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: #1B4F99; }
+
+/* ── TYPOGRAPHY ── */
+.type-specimen { margin-bottom: 20px; }
+.type-label { font-size: 10px; color: #999; font-family: 'JetBrains Mono', monospace; margin-bottom: 4px; letter-spacing: 0.5px; }
+
+.t-display {
+  font-family: 'Inter Tight', 'Inter', sans-serif;
+  font-size: 36px; font-weight: 700;
+  color: #0D2E5E;
+  line-height: 1.1;
+  letter-spacing: -0.8px;
+}
+.t-h1 {
+  font-family: 'Inter Tight', 'Inter', sans-serif;
+  font-size: 24px; font-weight: 600;
+  color: #0D2E5E;
+  line-height: 1.2;
+  letter-spacing: -0.4px;
+}
+.t-h2 {
+  font-family: 'Inter', sans-serif;
+  font-size: 18px; font-weight: 600;
+  color: #111;
+  line-height: 1.3;
+}
+.t-h3 {
+  font-family: 'Inter', sans-serif;
+  font-size: 14px; font-weight: 500;
+  color: #1B4F99;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+}
+.t-body {
+  font-family: 'Inter', sans-serif;
+  font-size: 15px; font-weight: 400;
+  color: #2a2a2a;
+  line-height: 1.7;
+}
+.t-caption {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px; font-weight: 400;
+  color: #666;
+  line-height: 1.5;
+}
+.t-code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; font-weight: 400;
+  color: #1B4F99;
+  background: #EEF3FB;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.t-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 500;
+  color: #555;
+  letter-spacing: 0.3px;
+}
+
+/* ── USAGE EXAMPLES ── */
+.usage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.usage-card {
+  border: 0.5px solid #d8e1f0;
+  border-radius: 10px;
+  padding: 16px;
+  background: #fff;
+}
+.usage-card.dark {
+  background: #0D2E5E;
+  border-color: #1B4F99;
+}
+.usage-card.blueprint {
+  background: #F5F7FB;
+  border: 0.5px solid #D0D8ED;
+}
+
+.tag {
+  display: inline-block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+.tag.primary { background: #1B4F99; color: #fff; }
+.tag.muted { background: #EEF3FB; color: #1B4F99; }
+.tag.alert { background: #C23B22; color: #fff; }
+.tag.neutral { background: #F0F0EE; color: #444; }
+
+/* ── DO / DONT ── */
+.rules { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.rule-card { border-radius: 8px; padding: 14px; font-size: 12px; line-height: 1.6; }
+.rule-card.do { background: #F0F7EF; border: 0.5px solid #9DC98C; color: #234D1A; }
+.rule-card.dont { background: #FBF0EF; border: 0.5px solid #E5A49E; color: #5C1E18; }
+.rule-card .rule-head { font-weight: 600; font-size: 11px; letter-spacing: 1px; margin-bottom: 6px; }
+.rule-card.do .rule-head { color: #2A6B1A; }
+.rule-card.dont .rule-head { color: #8B2818; }
+</style>
+
+<div class="brand-sheet">
+
+  <!-- ═══ SECTION: COLOR ═══ -->
+  <div class="section-label">01 — Color system</div>
+
+  <div class="color-block">
+    <div class="swatch large" style="background:#1B4F99;"></div>
+    <div class="color-meta">
+      <strong>Blueprint Blue — Primary</strong>
+      <span>The dominant brand color. Logo, primary CTAs, headings on white.</span>
+      <code>#1B4F99</code>
+      <code>RGB 27 79 153 · HSL 216° 70% 35%</code>
+    </div>
+  </div>
+
+  <div class="color-block">
+    <div class="swatch large" style="background:#0D2E5E;"></div>
+    <div class="color-meta">
+      <strong>Ink — Dark Primary</strong>
+      <span>Large display headings. Dark mode surfaces. Never pure black.</span>
+      <code>#0D2E5E</code>
+    </div>
+  </div>
+
+  <div class="color-block">
+    <div class="swatch large" style="background:#C23B22;"></div>
+    <div class="color-meta">
+      <strong>Signal Red — Accent</strong>
+      <span>Errors, warnings, highlights. Use sparingly — ≤5% of any surface.</span>
+      <code>#C23B22</code>
+    </div>
+  </div>
+
+  <div class="color-block">
+    <div class="swatch large" style="background:#F4F6FB;"></div>
+    <div class="color-meta">
+      <strong>Blueprint Paper — Background</strong>
+      <span>Page background. The grid paper feel. Never pure white for large areas.</span>
+      <code>#F4F6FB</code>
+    </div>
+  </div>
+
+  <p class="type-label" style="margin-bottom:8px;">Full blue ramp — use stops consistently</p>
+  <div class="color-row" style="margin-bottom:4px;">
+    <div class="swatch-group">
+      <div class="swatch" style="background:#EEF3FB;"></div>
+      <div class="swatch-hex">#EEF3FB</div>
+      <div class="swatch-name">50</div>
+    </div>
+    <div class="swatch-group">
+      <div class="swatch" style="background:#C8D9F2;"></div>
+      <div class="swatch-hex">#C8D9F2</div>
+      <div class="swatch-name">100</div>
+    </div>
+    <div class="swatch-group">
+      <div class="swatch" style="background:#8BAFE0;"></div>
+      <div class="swatch-hex">#8BAFE0</div>
+      <div class="swatch-name">200</div>
+    </div>
+    <div class="swatch-group">
+      <div class="swatch" style="background:#4B80C4;"></div>
+      <div class="swatch-hex">#4B80C4</div>
+      <div class="swatch-name">400</div>
+    </div>
+    <div class="swatch-group">
+      <div class="swatch" style="background:#1B4F99;"></div>
+      <div class="swatch-hex">#1B4F99</div>
+      <div class="swatch-name">600 ★</div>
+    </div>
+    <div class="swatch-group">
+      <div class="swatch" style="background:#0D2E5E;"></div>
+      <div class="swatch-hex">#0D2E5E</div>
+      <div class="swatch-name">800</div>
+    </div>
+    <div class="swatch-group">
+      <div class="swatch" style="background:#06172F;"></div>
+      <div class="swatch-hex">#06172F</div>
+      <div class="swatch-name">900</div>
+    </div>
+  </div>
+  <p class="type-label" style="color:#1B4F99; margin-bottom: 24px;">★ brand primary</p>
+
+  <p class="type-label" style="margin-bottom:8px;">Neutral ramp — UI chrome, borders, text hierarchy</p>
+  <div class="color-row">
+    <div class="swatch-group"><div class="swatch" style="background:#F4F6FB;"></div><div class="swatch-hex">#F4F6FB</div><div class="swatch-name">bg</div></div>
+    <div class="swatch-group"><div class="swatch" style="background:#E8ECF5;"></div><div class="swatch-hex">#E8ECF5</div><div class="swatch-name">surface</div></div>
+    <div class="swatch-group"><div class="swatch" style="background:#D0D8ED;"></div><div class="swatch-hex">#D0D8ED</div><div class="swatch-name">border</div></div>
+    <div class="swatch-group"><div class="swatch" style="background:#8896B3;"></div><div class="swatch-hex">#8896B3</div><div class="swatch-name">muted</div></div>
+    <div class="swatch-group"><div class="swatch" style="background:#444C60;"></div><div class="swatch-hex">#444C60</div><div class="swatch-name">secondary</div></div>
+    <div class="swatch-group"><div class="swatch" style="background:#1A2030;"></div><div class="swatch-hex">#1A2030</div><div class="swatch-name">primary</div></div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══ SECTION: TYPOGRAPHY ═══ -->
+  <div class="section-label">02 — Typography</div>
+
+  <div style="background:#EEF3FB; border-radius:10px; padding:14px 16px; margin-bottom:20px;">
+    <p class="type-label" style="margin-bottom:6px;">Font stack</p>
+    <p style="font-size:13px; line-height:1.8; font-family:'JetBrains Mono',monospace; color:#1B4F99;">
+      Display / Headings → <strong>Inter Tight</strong> (600, 700)<br>
+      Body / UI → <strong>Inter</strong> (400, 500)<br>
+      Code / Labels / Mono → <strong>JetBrains Mono</strong> (400, 500)
+    </p>
+  </div>
+
+  <div class="type-specimen">
+    <div class="type-label">Display — Inter Tight 700 · 36px · #0D2E5E · tracking -0.8px</div>
+    <div class="t-display">The Cadence of ML</div>
+  </div>
+
+  <div class="type-specimen">
+    <div class="type-label">H1 — Inter Tight 600 · 24px · #0D2E5E · tracking -0.4px</div>
+    <div class="t-h1">Designing the Architecture Layer</div>
+  </div>
+
+  <div class="type-specimen">
+    <div class="type-label">H2 — Inter 600 · 18px · #111</div>
+    <div class="t-h2">The 8-Layer Intelligence System</div>
+  </div>
+
+  <div class="type-specimen">
+    <div class="type-label">Section label — Inter 500 · 10px · #1B4F99 · uppercase · tracking 1.2px</div>
+    <div class="t-h3">Three Engineering Principles</div>
+  </div>
+
+  <div class="type-specimen">
+    <div class="type-label">Body — Inter 400 · 15px · #2a2a2a · line-height 1.7</div>
+    <div class="t-body">μLM was built because ML researchers needed a better design environment. VS Code was built because Microsoft needed a better editor.</div>
+  </div>
+
+  <div class="type-specimen">
+    <div class="type-label">Caption / metadata — Inter 400 · 12px · #666</div>
+    <div class="t-caption">Layer 3 — Tensor shapes recalculate automatically across the stack.</div>
+  </div>
+
+  <div class="type-specimen">
+    <div class="type-label">Inline code — JetBrains Mono 400 · 13px · #1B4F99 on #EEF3FB</div>
+    <div class="t-body">Set <span class="t-code">max_seq_len=128</span> across all MLM cells to resolve the shape mismatch.</div>
+  </div>
+
+  <div class="type-specimen">
+    <div class="type-label">UI label / tag — JetBrains Mono 500 · 11px · #555</div>
+    <div class="t-label">input · [32, 784] · tissue_block_1</div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══ SECTION: USAGE ═══ -->
+  <div class="section-label">03 — In context</div>
+
+  <div class="usage-grid" style="margin-bottom:12px;">
+    <div class="usage-card blueprint">
+      <span class="tag muted">docs</span>
+      <div class="t-h2" style="font-size:15px; margin-bottom:6px;">Tensor Layer</div>
+      <div class="t-body" style="font-size:13px; color:#444C60;">Edit a dimension here and VRAM allocation recalculates across the stack.</div>
+      <div style="margin-top:10px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#1B4F99; background:#E8ECF5; padding:8px 10px; border-radius:6px;">batch_size = 32<br>d_model = 512</div>
+    </div>
+    <div class="usage-card dark">
+      <span class="tag primary">studio</span>
+      <div style="font-family:'Inter Tight',sans-serif; font-size:15px; font-weight:600; color:#fff; margin-bottom:6px;">MuLM Studio</div>
+      <div style="font-size:12px; color:#8BAFE0; line-height:1.6;">Design-time validation active. 0 errors · 0 warnings.</div>
+      <div style="margin-top:10px; display:flex; gap:6px;">
+        <span class="tag neutral" style="background:#1B4F99; color:#C8D9F2;">Layer 3 · Tensor</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="usage-grid">
+    <div class="usage-card">
+      <span class="tag alert">error</span>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#C23B22; margin-bottom:6px;">Dim mismatch<br>[32, 512] → [32, 128]</div>
+      <div class="t-caption">Linear layer output does not match the input of the next block.</div>
+    </div>
+    <div class="usage-card blueprint">
+      <span class="tag muted">export</span>
+      <div class="t-label" style="margin-bottom:6px;">mulm_transformer_v2.mulm</div>
+      <div class="t-caption">Ready to export as Python package, .ipynb, SVG diagram, or HuggingFace push.</div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ═══ SECTION: RULES ═══ -->
+  <div class="section-label">04 — Rules</div>
+
+  <div class="rules">
+    <div class="rule-card do">
+      <div class="rule-head">✓ DO</div>
+      Use Inter Tight for all display headings<br>
+      Use #1B4F99 as the dominant brand color<br>
+      Keep Signal Red rare — errors and highlights only<br>
+      Use JetBrains Mono for all code and tensor labels<br>
+      Keep backgrounds #F4F6FB, not pure white<br>
+      Use blueprint paper texture in diagrams
+    </div>
+    <div class="rule-card dont">
+      <div class="rule-head">✗ DON'T</div>
+      Mix other blue families (no Bootstrap blue, no sky blue)<br>
+      Use gradients or drop shadows anywhere<br>
+      Use red for anything other than errors/warnings<br>
+      Use font weights above 700 or below 400<br>
+      Set body text smaller than 13px<br>
+      Use pure black (#000) — use #1A2030 instead
+    </div>
+  </div>
+
+</div>

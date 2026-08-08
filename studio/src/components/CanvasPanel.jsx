@@ -252,7 +252,11 @@ function CanvasPanelInner({
                   <span style={{ color: 'var(--text-primary, #ffffff)' }}>{drilledPath}</span>
                 </>
               ) : (
-                `${modelName ?? 'Model'} · ${nodes.length} nodes`
+                <>
+                  <span>{`${modelName ?? 'Model'} · ${nodes.length} nodes`}</span>
+                  <span>·</span>
+                  <span style={{ opacity: 0.5, fontFamily: 'var(--font-mono)' }}>Values: not yet checked</span>
+                </>
               )}
             </div>
           </Panel>

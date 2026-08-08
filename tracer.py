@@ -988,6 +988,7 @@ async def export_model(req: ExportRequest) -> Response:
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     import uvicorn
 
     print("µLM Studio — Tracer Backend")

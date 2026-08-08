@@ -27,6 +27,7 @@ import NotebookPanel from './components/NotebookPanel';
 import AnalysisPanel from './components/AnalysisPanel';
 import { useTracer } from './hooks/useTracer';
 import { useCodeGen, generateCode } from './hooks/useCodeGen';
+import { useClaude } from './hooks/useClaude';
 import {
   STATIC_GRAPH_CLEAN,
   STATIC_GRAPH_MISMATCH,
@@ -42,6 +43,8 @@ const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
 // ─────────────────────────────────────────────────────────────────────────────
 import { TEMPLATES } from './data/templates';
 export default function App() {
+
+  const { explainArchitecture } = useClaude();
 
   const [mismatching, setMismatching] = useState(false);
 
@@ -161,6 +164,10 @@ export default function App() {
   const [isTracing, setIsTracing] = useState(false);
   const tracingTimerRef = useRef(null); // safety reset after 5s to avoid stuck badge
 
+  // Rate-limit the Claude model-map call so it fires at most once per 15s,
+  // not on every debounced keystroke.
+  const lastClaudeCallRef = useRef(0);
+
   // In DEMO_MODE mismatch state → inject the pre-built hardcoded message
   const demoProblems = mismatching
     ? [{
@@ -229,12 +236,32 @@ export default function App() {
     setIsTracing(false);
     clearTimeout(tracingTimerRef.current);
 
+    // Claude architecture map — fire and forget, rate-limited to once per 15s.
+    // Entry shape matches the OUTPUT log contract used by handleLog / AnalysisPanel
+    // ({ text, isError, id }).
+    const now = Date.now();
+    if (graph.nodes?.length > 0 && now - lastClaudeCallRef.current > 15000) {
+      lastClaudeCallRef.current = now;
+      explainArchitecture(graph, liveCodeRef.current).then((result) => {
+        if (result.ok) {
+          setOutputLog((prev) => [
+            {
+              text: `🤖 Claude Model Map: ${result.text}`,
+              isError: false,
+              id: Date.now() + Math.random(),
+            },
+            ...prev,
+          ].slice(0, 200));
+        }
+      });
+    }
+
     if (drilledPathRef.current) {
       return;
     }
     setCanvasNodes(rawNodes);
     setCanvasEdges(graph.edges);
-  }, []);
+  }, [explainArchitecture]);
 
   const handleTraceError = useCallback((msg) => {
     setTraceError(msg);

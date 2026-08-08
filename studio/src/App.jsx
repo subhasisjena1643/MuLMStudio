@@ -153,6 +153,9 @@ export default function App() {
   // ── Analysis panel problems ───────────────────────────────────────────────────
   const [traceError, setTraceError] = useState(null);
   const [liveProblems, setLiveProblems] = useState([]);
+  // Value-level check results from the backend (null until a trace with a
+  // real loss/optimizer/training-step signal runs — see tracer.py).
+  const [checks, setChecks] = useState(null);
 
   // ── OUTPUT / TERMINAL / DEBUG log state ────────────────────────────────────
   const [outputLog,   setOutputLog]   = useState([]);  // { text, isError, ts }
@@ -178,10 +181,18 @@ export default function App() {
       }]
     : [];
 
+  // Derive a content-based key for trace errors (rather than a constant
+  // 'trace-error' id) so a genuinely different error gets a fresh ProblemRow
+  // instance — otherwise React reuses the old instance and the auto-fetched
+  // Claude explanation never updates for the new error text.
+  const traceErrorKey = traceError
+    ? `trace-error-${(typeof traceError === 'string' ? traceError : (traceError.headline ?? JSON.stringify(traceError))).slice(0, 120)}`
+    : null;
+
   const allProblems = DEMO_MODE
     ? demoProblems
     : [
-      ...(traceError ? [{ id: 'trace-error', severity: 'error', message: traceError }] : []),
+      ...(traceError ? [{ id: traceErrorKey, severity: 'error', message: traceError }] : []),
       ...liveProblems,
       ...codeGenProblems,
     ];
@@ -230,6 +241,11 @@ export default function App() {
       setLiveProblems([]);
     }
 
+    // Backend-computed value-level checks (overfit-one-batch / loss-at-init /
+    // reproducibility) — present only when the traced code shows real
+    // loss+optimizer+training-step signals. See tracer.py's _build_checks_result.
+    setChecks(graph.checks ?? null);
+
     // Extract model class name for the canvas badge
     const firstCall = graph.nodes.find((n) => n.data?.op === 'call_module');
     setModelName(graph.model_name ?? firstCall?.data?.label ?? 'Live model');
@@ -246,7 +262,8 @@ export default function App() {
         if (result.ok) {
           setOutputLog((prev) => [
             {
-              text: `🤖 Claude Model Map: ${result.text}`,
+              text: result.text,
+              kind: 'claude',
               isError: false,
               id: Date.now() + Math.random(),
             },
@@ -279,7 +296,7 @@ export default function App() {
     if (type === 'terminal') setTerminalLog((l) => [entry, ...l].slice(0, 400));
   }, []);
 
-  const { sendCode, wsStatus } = useTracer(
+  const { sendCode, cancelPending, wsStatus } = useTracer(
     DEMO_MODE ? () => { } : handleGraph,
     DEMO_MODE ? () => { } : handleTraceError,
     handleLog,
@@ -448,8 +465,14 @@ export default function App() {
     if (!v.trim()) {
       setCanvasNodes([]);
       setCanvasEdges([]);
+      setChecks(null);
       setIsTracing(false);
       clearTimeout(tracingTimerRef.current);
+      // Cancel any debounced send still in flight from mid-backspace — without
+      // this, a leftover fragment from just before the last keystroke can fire
+      // after the user has already moved on (e.g. into a paste), tracing stale
+      // garbage instead of what's actually about to replace it.
+      cancelPending();
       liveCodeRef.current = v;
       setCodeSource('user');
       return; // no WS send needed
@@ -469,7 +492,7 @@ export default function App() {
     tracingTimerRef.current = setTimeout(() => setIsTracing(false), 5000);
 
     sendCode(v, inputShape);
-  }, [sendCode, pushHistory, canvasNodes, canvasEdges, inputShape]);
+  }, [sendCode, cancelPending, pushHistory, canvasNodes, canvasEdges, inputShape]);
 
   // ── Canvas drop handler (palette → canvas) ───────────────────────────────────
   const handleCanvasNodesChange = useCallback((nodes) => {
@@ -714,6 +737,7 @@ export default function App() {
             outputLog={outputLog}
             terminalLog={terminalLog}
             selectedNode={selectedNode}
+            checks={DEMO_MODE ? null : checks}
           />
         </div>
 

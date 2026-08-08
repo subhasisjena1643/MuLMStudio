@@ -1,22 +1,58 @@
 /**
  * AnalysisPanel.jsx
- * Bottom panel — PROBLEMS | OUTPUT | DEBUG | TERMINAL tabs.
+ * Bottom panel — PROBLEMS | CHECKS | OUTPUT | DEBUG | TERMINAL tabs.
  *
  * Each problem entry shows:
  *   [ERR/WARN badge]  [one-line headline message]
  *                     [Show details ↓]   ← text toggle, collapsed by default
  *                     [full traceback]   ← expands on click, JetBrains Mono, muted
+ *   Claude diagnosis is fetched automatically once per distinct problem
+ *   (both shape_mismatch and generic trace errors) — see ProblemRow.
  *
  * problem shape:
  *   { id, severity: 'error'|'warn', message: string | { headline, traceback } }
+ *
+ * checks shape (from the backend, via useTracer → App.jsx; null until a real
+ * training-signal trace runs, or always null in DEMO_MODE):
+ *   { overfit_one_batch: {status, reason}, loss_at_init: {...}, reproducibility: {...} }
+ *   status ∈ 'off' | 'pass' | 'fail'
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useClaude } from '../hooks/useClaude';
 
 const TABS = ['PROBLEMS', 'CHECKS', 'OUTPUT', 'DEBUG', 'TERMINAL'];
 
-export default function AnalysisPanel({ problems = [], outputLog = [], terminalLog = [], selectedNode = null }) {
+const CHECK_DEFS = [
+  {
+    key: 'overfit_one_batch',
+    name: 'Overfit-one-batch',
+    reason: 'Declare a loss and an optimizer to enable this check. µLM will not invent a training loop for you.',
+  },
+  {
+    key: 'loss_at_init',
+    name: 'Loss-at-init',
+    reason: 'Requires a declared loss function and data sample.',
+  },
+  {
+    key: 'reproducibility',
+    name: 'Reproducibility',
+    reason: 'Requires a declared training step to seed and compare.',
+  },
+];
+
+const STATUS_COLOR = {
+  off: '#555',
+  pass: '#3D7A56',
+  fail: '#C0392B',
+};
+
+export default function AnalysisPanel({ problems = [], outputLog = [], terminalLog = [], selectedNode = null, checks = null }) {
   const [activeTab, setActiveTab] = useState('PROBLEMS');
+
+  const ranChecks = checks ? Object.values(checks).filter((c) => c.status === 'pass' || c.status === 'fail') : [];
+  const passedChecks = ranChecks.filter((c) => c.status === 'pass');
+  const valuesLabel = ranChecks.length > 0 ? `${passedChecks.length}/${ranChecks.length} passing` : 'not yet checked';
+  const valuesColor = ranChecks.length === 0 ? undefined : (passedChecks.length === ranChecks.length ? '#3D7A56' : '#C0392B');
 
   return (
     <div className="analysis-panel">
@@ -73,52 +109,41 @@ export default function AnalysisPanel({ problems = [], outputLog = [], terminalL
                 Graph: <span style={{ color: '#3D7A56' }}>clean</span>
               </span>
               <span style={{ color: 'var(--text-muted)' }}>
-                Values: <span style={{ opacity: 0.4 }}>not yet checked</span>
+                Values: <span style={{ color: valuesColor, opacity: valuesColor ? 1 : 0.4 }}>{valuesLabel}</span>
               </span>
             </div>
 
             {/* Check cards */}
-            {[
-              {
-                name: 'Overfit-one-batch',
-                status: 'off',
-                reason: 'Declare a loss and an optimizer to enable this check. µLM will not invent a training loop for you.'
-              },
-              {
-                name: 'Loss-at-init',
-                status: 'off',
-                reason: 'Requires a declared loss function and data sample.'
-              },
-              {
-                name: 'Reproducibility',
-                status: 'off',
-                reason: 'Requires a declared training step to seed and compare.'
-              }
-            ].map((check, i) => (
-              <div key={i} style={{
-                padding: '8px 10px',
-                background: 'rgba(255,255,255,0.02)',
-                border: '1px solid var(--border-default)',
-                borderRadius: '3px',
-                fontSize: '11px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                  <span style={{
-                    display: 'inline-block', width: '8px', height: '8px',
-                    borderRadius: '2px', background: '#555'
-                  }} />
-                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
-                    {check.name}
-                  </span>
-                  <span style={{ color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                    {check.status}
-                  </span>
+            {CHECK_DEFS.map((def) => {
+              const result = checks?.[def.key];
+              const status = result?.status ?? 'off';
+              const reason = result?.reason ?? def.reason;
+              return (
+                <div key={def.key} style={{
+                  padding: '8px 10px',
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: '3px',
+                  fontSize: '11px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                    <span style={{
+                      display: 'inline-block', width: '8px', height: '8px',
+                      borderRadius: '2px', background: STATUS_COLOR[status] ?? '#555'
+                    }} />
+                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                      {def.name}
+                    </span>
+                    <span style={{ color: STATUS_COLOR[status] ?? 'var(--text-muted)', marginLeft: 'auto', textTransform: status === 'off' ? 'none' : 'uppercase', fontWeight: status === 'off' ? 400 : 600 }}>
+                      {status}
+                    </span>
+                  </div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '10px', lineHeight: '1.4' }}>
+                    ■ {reason}
+                  </div>
                 </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '10px', lineHeight: '1.4' }}>
-                  ■ {check.reason}
-                </div>
-              </div>
-            ))}
+              );
+            })}
 
             <div style={{
               fontSize: '10px', color: 'var(--text-muted)',
@@ -131,46 +156,51 @@ export default function AnalysisPanel({ problems = [], outputLog = [], terminalL
         )}
         {activeTab === 'OUTPUT' && (
           outputLog.length === 0 ? (
-            <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+            <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, padding: '8px 10px' }}>
               — ready —
             </div>
           ) : (
-            <div style={{ fontFamily: "'JetBrains Mono','Consolas',monospace", fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px' }}>
               {outputLog.map((e) => (
-                <div key={e.id} style={{ color: e.isError ? 'var(--status-error)' : 'var(--text-muted)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                  {e.text}
-                </div>
+                e.kind === 'claude' ? (
+                  <div key={e.id} style={{
+                    fontFamily: 'Inter, var(--font-sans), sans-serif',
+                    fontSize: 12,
+                    color: 'var(--text-primary)',
+                    lineHeight: 1.6,
+                    background: 'rgba(91, 141, 184, 0.06)',
+                    border: '1px solid rgba(91, 141, 184, 0.18)',
+                    borderRadius: 4,
+                    padding: '10px 12px',
+                  }}>
+                    <div style={{
+                      fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
+                      color: 'var(--text-accent, #5B8DB8)', marginBottom: 6,
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      fontFamily: 'Inter, var(--font-sans), sans-serif',
+                    }}>
+                      <span>🤖</span> Claude Model Map
+                    </div>
+                    {renderClaudeText(e.text)}
+                  </div>
+                ) : (
+                  <div key={e.id} style={{
+                    color: e.isError ? 'var(--status-error)' : 'var(--text-muted)',
+                    fontFamily: "'JetBrains Mono','Consolas',monospace",
+                    fontSize: 12,
+                    whiteSpace: 'pre-wrap',
+                    lineHeight: 1.5,
+                    padding: '2px 4px',
+                  }}>
+                    {e.text}
+                  </div>
+                )
               ))}
             </div>
           )
         )}
         {activeTab === 'DEBUG' && (
-          selectedNode ? (
-            <div>
-              <div style={{ fontFamily: 'Inter, var(--font-ui), sans-serif', fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', marginBottom: 8 }}>
-                Selected: {selectedNode.data?.label ?? selectedNode.id}
-              </div>
-              <pre style={{
-                fontFamily: "'JetBrains Mono','Consolas',monospace",
-                fontSize: 11,
-                color: 'var(--text-muted)',
-                background: 'var(--bg-base)',
-                padding: 8,
-                margin: 0,
-                borderRadius: 2,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                lineHeight: 1.6,
-                overflowX: 'auto',
-              }}>
-                {JSON.stringify(selectedNode.data, null, 2)}
-              </pre>
-            </div>
-          ) : (
-            <div style={{ fontFamily: 'Inter, var(--font-ui), sans-serif', fontWeight: 400, fontSize: 13, color: 'var(--text-muted)' }}>
-              Select a block to inspect its properties.
-            </div>
-          )
+          <DebugPanelBody selectedNode={selectedNode} />
         )}
         {activeTab === 'TERMINAL' && (
           terminalLog.length === 0 ? (
@@ -192,15 +222,227 @@ export default function AnalysisPanel({ problems = [], outputLog = [], terminalL
   );
 }
 
+// ── Rich-text rendering for Claude output ──────────────────────────────────────
+// Claude's replies sometimes carry light markdown (**bold**, `code`). Render
+// just enough of it to stop that markup from showing up as literal asterisks
+// and backticks — this is not a general markdown renderer.
+
+function renderClaudeInline(text, keyPrefix) {
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).filter((p) => p !== '');
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={`${keyPrefix}-${i}`}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return (
+        <code key={`${keyPrefix}-${i}`} style={{
+          fontFamily: "'JetBrains Mono','Consolas',monospace",
+          fontSize: '0.92em',
+          background: 'rgba(255,255,255,0.07)',
+          padding: '1px 4px',
+          borderRadius: 2,
+        }}>
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return part;
+  });
+}
+
+function renderClaudeText(text) {
+  if (!text) return null;
+  const paragraphs = text.split(/\n\s*\n/).filter((p) => p.trim() !== '');
+  if (paragraphs.length === 0) return null;
+  return paragraphs.map((para, i) => (
+    <p key={i} style={{ margin: i === 0 ? '0 0 6px' : '6px 0 0', padding: 0 }}>
+      {renderClaudeInline(para, i)}
+    </p>
+  ));
+}
+
+// ── DebugPanelBody ────────────────────────────────────────────────────────────
+// Powered by Claude: auto-explains the selected block in plain English.
+// Raw JSON stays available behind a "Show raw data" toggle for power users.
+
+function DebugPanelBody({ selectedNode }) {
+  const { explainNode } = useClaude();
+  // Only ever set from the resolved promise below — "loading" is derived at
+  // render time by comparing result.nodeId to the current selection, rather
+  // than tracked as its own state flip inside the effect.
+  const [result, setResult] = useState(null); // { nodeId, text }
+  const [showRaw, setShowRaw] = useState(false);
+
+  useEffect(() => {
+    if (!selectedNode) return undefined;
+    let cancelled = false;
+    explainNode(selectedNode.data).then((res) => {
+      if (!cancelled) setResult({ nodeId: selectedNode.id, text: res.text });
+    });
+    return () => { cancelled = true; };
+    // Re-fetch only when the selected block changes, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNode?.id]);
+
+  if (!selectedNode) {
+    return (
+      <div style={{ fontFamily: 'Inter, var(--font-ui), sans-serif', fontWeight: 400, fontSize: 13, color: 'var(--text-muted)' }}>
+        Select a block to inspect its properties.
+      </div>
+    );
+  }
+
+  const current = result?.nodeId === selectedNode.id ? result : null;
+
+  return (
+    <div>
+      <div style={{ fontFamily: 'Inter, var(--font-ui), sans-serif', fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', marginBottom: 8 }}>
+        Selected: {selectedNode.data?.label ?? selectedNode.id}
+      </div>
+
+      <div style={{
+        fontFamily: 'Inter, var(--font-sans), sans-serif',
+        fontSize: 12,
+        color: 'var(--text-primary)',
+        lineHeight: 1.6,
+        background: 'rgba(91, 141, 184, 0.06)',
+        border: '1px solid rgba(91, 141, 184, 0.18)',
+        borderRadius: 4,
+        padding: '10px 12px',
+        marginBottom: 10,
+      }}>
+        <div style={{
+          fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
+          color: 'var(--text-accent, #5B8DB8)', marginBottom: 6,
+          display: 'flex', alignItems: 'center', gap: 5,
+        }}>
+          <span>🤖</span> Claude
+        </div>
+        {!current ? '⏳ Reading this block…' : renderClaudeText(current.text)}
+      </div>
+
+      <button
+        onClick={() => setShowRaw((v) => !v)}
+        style={{
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
+          color: 'var(--text-muted)',
+          fontFamily: 'var(--font-sans)',
+          fontWeight: 400,
+          fontSize: 10,
+          letterSpacing: '0.01em',
+          userSelect: 'none',
+        }}
+      >
+        {showRaw ? 'Hide raw data' : 'Show raw data'}
+      </button>
+
+      {showRaw && (
+        <pre style={{
+          fontFamily: "'JetBrains Mono','Consolas',monospace",
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          background: 'var(--bg-base)',
+          padding: 8,
+          margin: '6px 0 0',
+          borderRadius: 2,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          lineHeight: 1.6,
+          overflowX: 'auto',
+        }}>
+          {JSON.stringify(selectedNode.data, null, 2)}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 // ── ProblemRow ────────────────────────────────────────────────────────────────
+// Claude diagnosis is fetched automatically once per distinct problem (keyed
+// upstream by a stable id — see App.jsx's allProblems construction), covering
+// both shape_mismatch rows and generic trace-error rows. A manual "Re-ask"
+// affordance re-fetches on demand.
 
 function ProblemRow({ problem }) {
   const [expanded, setExpanded] = useState(false);
-  const { explainMismatch, isLoading: claudeLoading } = useClaude();
-  const [explanations, setExplanations] = useState({});
+  const { explainMismatch, explainError } = useClaude();
+  // null = no answer for the current `attempt` yet (i.e. loading). Only ever
+  // set from a resolved promise — see the effect below — so a fresh "attempt"
+  // is how we ask for a re-fetch, rather than setting a loading flag directly.
+  const [claudeText, setClaudeText] = useState(null);
+  const [attempt, setAttempt] = useState(0);
   const isError = problem.severity === 'error';
+  const isMismatch = problem.type === 'shape_mismatch';
 
-  if (problem.type === 'shape_mismatch') {
+  // message can be a plain string (from codeGen / demo) or
+  // a structured { headline, traceback } object (from useTracer live errors).
+  const msg = problem.message;
+  let headline, traceback;
+  if (isMismatch) {
+    headline = problem.headline;
+    traceback = null;
+  } else if (msg && typeof msg === 'object') {
+    headline  = msg.headline  ?? JSON.stringify(msg);
+    traceback = msg.traceback ?? null;
+  } else {
+    headline  = typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2);
+    traceback = null;
+  }
+
+  // Auto-fires once when this row first mounts (attempt starts at 0), and
+  // again whenever the "Re-ask" button bumps `attempt`. React reuses the
+  // same component instance across re-renders as long as the parent's key
+  // for this problem is unchanged, so this does not re-fire on every
+  // debounced retrace of an already-explained problem — only when a
+  // genuinely new problem (new key) appears or a re-ask is requested.
+  useEffect(() => {
+    let cancelled = false;
+    const run = isMismatch ? explainMismatch(problem) : explainError(headline, traceback);
+    run.then((result) => { if (!cancelled) setClaudeText(result.text); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attempt]);
+
+  const claudeCard = (
+    <div style={{
+      marginTop: '6px',
+      padding: '8px 10px',
+      background: 'rgba(91, 141, 184, 0.06)',
+      border: '1px solid rgba(91, 141, 184, 0.18)',
+      borderRadius: '3px',
+      fontSize: '12px',
+      fontFamily: 'Inter, var(--font-sans), sans-serif',
+      color: 'var(--text-primary)',
+      lineHeight: '1.6',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6, marginBottom: claudeText === null ? 0 : 4,
+      }}>
+        <span style={{
+          fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
+          color: 'var(--text-accent, #5B8DB8)', display: 'flex', alignItems: 'center', gap: 5,
+        }}>
+          <span>🤖</span> Claude
+        </span>
+        <button
+          onClick={() => { setClaudeText(null); setAttempt((a) => a + 1); }}
+          title="Re-ask Claude"
+          style={{
+            background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+            color: 'var(--text-muted)', fontSize: 11, marginLeft: 'auto', lineHeight: 1,
+          }}
+        >
+          ↻
+        </button>
+      </div>
+      {claudeText === null ? '⏳ Analyzing…' : renderClaudeText(claudeText)}
+    </div>
+  );
+
+  if (isMismatch) {
     return (
       <div
         style={{
@@ -212,38 +454,16 @@ function ProblemRow({ problem }) {
         onMouseEnter={(e) => { e.currentTarget.style.background = '#1D2027'; }}
         onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: '#C0392B', fontWeight: 600, fontSize: 13 }}>⚠</span>
-            <span style={{
-              color: '#E4E6EB',
-              fontFamily: 'Inter, var(--font-sans), sans-serif',
-              fontWeight: 500,
-              fontSize: 13,
-            }}>
-              {problem.headline}
-            </span>
-          </div>
-          <button
-            onClick={async () => {
-              const key = problem.edge_id || problem.headline || problem.id;
-              setExplanations(prev => ({ ...prev, [key]: { loading: true } }));
-              const result = await explainMismatch(problem);
-              setExplanations(prev => ({ ...prev, [key]: { loading: false, text: result.text } }));
-            }}
-            style={{
-              background: 'none',
-              border: 'none',
-              padding: 0,
-              cursor: 'pointer',
-              color: 'var(--text-accent, #5B8DB8)',
-              fontFamily: 'var(--font-sans)',
-              fontSize: 11,
-              fontWeight: 500,
-            }}
-          >
-            {claudeLoading ? '⏳ Asking Claude…' : 'Ask Claude ↗'}
-          </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ color: '#C0392B', fontWeight: 600, fontSize: 13 }}>⚠</span>
+          <span style={{
+            color: '#E4E6EB',
+            fontFamily: 'Inter, var(--font-sans), sans-serif',
+            fontWeight: 500,
+            fontSize: 13,
+          }}>
+            {problem.headline}
+          </span>
         </div>
 
         <div style={{ paddingLeft: 18, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -282,41 +502,10 @@ function ProblemRow({ problem }) {
             {problem.suggestion}
           </div>
 
-          {/* Claude diagnosis */}
-          {explanations[problem.edge_id || problem.headline || problem.id] && (
-            <div style={{
-              marginTop: '6px',
-              padding: '8px 10px',
-              background: 'rgba(61, 122, 86, 0.08)',
-              border: '1px solid rgba(61, 122, 86, 0.2)',
-              borderRadius: '3px',
-              fontSize: '11px',
-              fontFamily: 'var(--font-mono)',
-              color: 'var(--text-primary)',
-              lineHeight: '1.5',
-              whiteSpace: 'pre-wrap'
-            }}>
-              {explanations[problem.edge_id || problem.headline || problem.id].loading
-                ? '⏳ Claude is analyzing the shape mismatch…'
-                : explanations[problem.edge_id || problem.headline || problem.id].text}
-            </div>
-          )}
+          {claudeCard}
         </div>
       </div>
     );
-  }
-
-  // message can be a plain string (from codeGen / demo) or
-  // a structured { headline, traceback } object (from useTracer live errors).
-  const msg = problem.message;
-  let headline, traceback;
-  if (msg && typeof msg === 'object') {
-    headline  = msg.headline  ?? JSON.stringify(msg);
-    traceback = msg.traceback ?? null;
-  } else {
-    // Plain string — treat whole thing as headline, no traceback
-    headline  = typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2);
-    traceback = null;
   }
 
   const hasDetails = Boolean(traceback);
@@ -348,50 +537,55 @@ function ProblemRow({ problem }) {
           whiteSpace: 'pre-wrap',
           wordBreak:  'break-word',
           lineHeight: 1.5,
+          fontFamily: "'JetBrains Mono', 'Fira Code', var(--font-mono), monospace",
         }}>
           {headline}
         </span>
       </div>
 
-      {/* "Show details" toggle — only when traceback exists */}
-      {hasDetails && (
-        <div style={{ paddingLeft: 32, marginTop: 3 }}>
-          <button
-            onClick={() => setExpanded((v) => !v)}
-            style={{
-              background:    'none',
-              border:        'none',
-              padding:       0,
-              cursor:        'pointer',
-              color:         'var(--text-muted)',
-              fontFamily:    'var(--font-sans)',
-              fontWeight:    400,
-              fontSize:      10,
-              letterSpacing: '0.01em',
-              userSelect:    'none',
-            }}
-          >
-            {expanded ? 'Hide details' : 'Show details'}
-          </button>
+      <div style={{ paddingLeft: 32 }}>
+        {claudeCard}
 
-          {/* Expanded traceback */}
-          {expanded && (
-            <pre style={{
-              margin:      '6px 0 2px',
-              padding:     0,
-              fontFamily:  "'JetBrains Mono', 'Fira Code', var(--font-mono), monospace",
-              fontSize:    10,
-              color:       'var(--text-muted)',
-              whiteSpace:  'pre-wrap',
-              wordBreak:   'break-word',
-              lineHeight:  1.6,
-              overflowX:   'auto',
-            }}>
-              {traceback}
-            </pre>
-          )}
-        </div>
-      )}
+        {/* "Show details" toggle — only when traceback exists */}
+        {hasDetails && (
+          <div style={{ marginTop: 6 }}>
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              style={{
+                background:    'none',
+                border:        'none',
+                padding:       0,
+                cursor:        'pointer',
+                color:         'var(--text-muted)',
+                fontFamily:    'var(--font-sans)',
+                fontWeight:    400,
+                fontSize:      10,
+                letterSpacing: '0.01em',
+                userSelect:    'none',
+              }}
+            >
+              {expanded ? 'Hide raw traceback' : 'Show raw traceback'}
+            </button>
+
+            {/* Expanded traceback */}
+            {expanded && (
+              <pre style={{
+                margin:      '6px 0 2px',
+                padding:     0,
+                fontFamily:  "'JetBrains Mono', 'Fira Code', var(--font-mono), monospace",
+                fontSize:    10,
+                color:       'var(--text-muted)',
+                whiteSpace:  'pre-wrap',
+                wordBreak:   'break-word',
+                lineHeight:  1.6,
+                overflowX:   'auto',
+              }}>
+                {traceback}
+              </pre>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

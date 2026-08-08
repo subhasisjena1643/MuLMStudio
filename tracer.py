@@ -42,11 +42,14 @@ REST endpoints
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime
 import json
 import os
+import re
 import sys
 import textwrap
+import threading
 import time
 import traceback as tb
 from concurrent.futures import ThreadPoolExecutor
@@ -420,6 +423,185 @@ def _infer_dummy_input(
     return torch.randn(2, 128, 512)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Value-level checks (Overfit-one-batch / Loss-at-init / Reproducibility)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Honest-degradation applies here too: these are never faked or simulated.
+# µLM never invents a training loop — it only observes and reports on a loop
+# the user's own code actually runs. If the pasted code has no loss/optimizer/
+# training-step signal, every check stays "off" with the reason why.
+#
+# Detection is a cheap static regex pre-scan of the raw source (no execution).
+# When a training step IS present, torch.Tensor.backward is monkeypatched for
+# the duration of the (already-happening) exec() call to record the loss
+# value at each .backward() call — this doesn't add a new execution surface,
+# it just observes the one that already runs every trace.
+
+_LOSS_PATTERN = re.compile(
+    r"\b(nn\.(CrossEntropyLoss|MSELoss|BCELoss|BCEWithLogitsLoss|NLLLoss|"
+    r"L1Loss|SmoothL1Loss|KLDivLoss|HuberLoss)|"
+    r"F\.(cross_entropy|mse_loss|nll_loss|binary_cross_entropy|"
+    r"binary_cross_entropy_with_logits|l1_loss|smooth_l1_loss))\s*\("
+)
+_OPTIMIZER_PATTERN = re.compile(
+    r"\btorch\.optim\.(SGD|Adam|AdamW|RMSprop|Adagrad|Adadelta|NAdam|RAdam|Adamax)\s*\("
+)
+_BACKWARD_PATTERN = re.compile(r"\.backward\s*\(")
+_STEP_PATTERN = re.compile(r"\.step\s*\(\s*\)")
+
+# Guards the (rare, single-user-local-demo) window where torch.Tensor.backward
+# is globally monkeypatched — prevents two concurrently-instrumented traces
+# from clobbering each other's recorder. Not a general execution sandbox.
+_backward_patch_lock = threading.Lock()
+
+# Reproducibility re-runs are skipped past this many recorded optimizer steps,
+# so a long training loop doesn't double the cost of every keystroke's trace.
+_REPRO_MAX_STEPS = 50
+
+
+def _detect_training_signals(code: str) -> Dict[str, bool]:
+    """Static, execution-free scan for loss/optimizer/training-step declarations."""
+    has_loss = bool(_LOSS_PATTERN.search(code))
+    has_optimizer = bool(_OPTIMIZER_PATTERN.search(code))
+    has_backward = bool(_BACKWARD_PATTERN.search(code))
+    has_step = bool(_STEP_PATTERN.search(code))
+    return {
+        "has_loss": has_loss,
+        "has_optimizer": has_optimizer,
+        "has_training_step": has_backward and has_step and has_optimizer,
+    }
+
+
+@contextlib.contextmanager
+def _backward_recorder(sink: List[float]):
+    """Record the scalar value of every tensor .backward() is called on."""
+    orig_backward = torch.Tensor.backward
+
+    def _patched(self, *args, **kwargs):
+        try:
+            if self.numel() == 1:
+                sink.append(float(self.detach().item()))
+        except Exception:
+            pass
+        return orig_backward(self, *args, **kwargs)
+
+    torch.Tensor.backward = _patched
+    try:
+        yield
+    finally:
+        torch.Tensor.backward = orig_backward
+
+
+def _rerun_for_reproducibility(code: str) -> Optional[List[float]]:
+    """Re-execute the same code from a fresh, identically-seeded namespace."""
+    try:
+        namespace2 = _build_exec_namespace()
+        sink: List[float] = []
+        with _backward_patch_lock:
+            torch.manual_seed(1337)
+            with _backward_recorder(sink):
+                exec(compile(code, "<mulm_user_code_repro>", "exec"), namespace2)  # noqa: S102
+        return sink
+    except Exception:
+        return None
+
+
+def _build_checks_result(
+    code: str,
+    signals: Dict[str, bool],
+    recorded_losses: List[float],
+) -> Dict[str, Any]:
+    """Turn detection + recorded loss values into the Checks-tab payload."""
+    checks: Dict[str, Any] = {}
+
+    # ── Loss-at-init ──────────────────────────────────────────────────────────
+    if not signals["has_loss"]:
+        checks["loss_at_init"] = {
+            "status": "off",
+            "reason": "Requires a declared loss function and data sample.",
+        }
+    elif not recorded_losses:
+        checks["loss_at_init"] = {
+            "status": "off",
+            "reason": "Loss function declared, but no .backward() call was observed — "
+                      "µLM only measures values your own code actually computes.",
+        }
+    else:
+        checks["loss_at_init"] = {
+            "status": "pass",
+            "reason": f"Initial loss = {recorded_losses[0]:.4f}",
+        }
+
+    # ── Overfit-one-batch ─────────────────────────────────────────────────────
+    if not signals["has_optimizer"] or not signals["has_training_step"]:
+        checks["overfit_one_batch"] = {
+            "status": "off",
+            "reason": "Declare a loss and an optimizer to enable this check. "
+                      "µLM will not invent a training loop for you.",
+        }
+    elif len(recorded_losses) < 2:
+        checks["overfit_one_batch"] = {
+            "status": "off",
+            "reason": f"Only {len(recorded_losses)} optimizer step(s) detected — "
+                      "run at least 2 so µLM can compare the trend.",
+        }
+    else:
+        first, last = recorded_losses[0], recorded_losses[-1]
+        improved = last < first * 0.9
+        checks["overfit_one_batch"] = {
+            "status": "pass" if improved else "fail",
+            "reason": (
+                f"Loss dropped {first:.4f} → {last:.4f} over {len(recorded_losses)} steps."
+                if improved else
+                f"Loss did not meaningfully drop ({first:.4f} → {last:.4f} over "
+                f"{len(recorded_losses)} steps) — check gradients are flowing and the "
+                "optimizer is stepping the right parameters."
+            ),
+        }
+
+    # ── Reproducibility ───────────────────────────────────────────────────────
+    if not signals["has_training_step"]:
+        checks["reproducibility"] = {
+            "status": "off",
+            "reason": "Requires a declared training step to seed and compare.",
+        }
+    elif not recorded_losses:
+        checks["reproducibility"] = {
+            "status": "off",
+            "reason": "No optimizer steps were recorded to compare.",
+        }
+    elif len(recorded_losses) > _REPRO_MAX_STEPS:
+        checks["reproducibility"] = {
+            "status": "off",
+            "reason": f"Training loop has {len(recorded_losses)} steps — the reproducibility "
+                      f"re-run is skipped past {_REPRO_MAX_STEPS} steps to keep tracing responsive.",
+        }
+    else:
+        repro_losses = _rerun_for_reproducibility(code)
+        if repro_losses is None:
+            checks["reproducibility"] = {
+                "status": "off",
+                "reason": "The reproducibility re-run itself errored — see PROBLEMS for details.",
+            }
+        else:
+            match = (
+                len(repro_losses) == len(recorded_losses)
+                and all(abs(a - b) < 1e-6 for a, b in zip(recorded_losses, repro_losses))
+            )
+            checks["reproducibility"] = {
+                "status": "pass" if match else "fail",
+                "reason": (
+                    "Two seeded runs produced identical loss trajectories."
+                    if match else
+                    "Two runs seeded the same way produced different results — check for "
+                    "non-deterministic ops or unseeded randomness (numpy, python random, "
+                    "or data loading order) elsewhere in your code."
+                ),
+            }
+
+    return checks
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Core tracing logic  (synchronous — runs in thread pool)
@@ -443,12 +625,25 @@ def _do_trace(
     """
     t_start = time.perf_counter()
 
+    # Static, execution-free pre-scan for loss/optimizer/training-step signals.
+    # Only when a real training step is present do we seed torch and record
+    # .backward() calls during the exec() below — everything else about a
+    # normal (model-definition-only) trace is unaffected.
+    training_signals = _detect_training_signals(code)
+    recorded_losses: List[float] = []
+
     # ── Phase 1: exec user code ───────────────────────────────────────────────
     namespace = _build_exec_namespace()
     base_names = frozenset(namespace.keys())
 
     try:
-        exec(compile(code, "<mulm_user_code>", "exec"), namespace)  # noqa: S102
+        if training_signals["has_training_step"]:
+            with _backward_patch_lock:
+                torch.manual_seed(1337)
+                with _backward_recorder(recorded_losses):
+                    exec(compile(code, "<mulm_user_code>", "exec"), namespace)  # noqa: S102
+        else:
+            exec(compile(code, "<mulm_user_code>", "exec"), namespace)  # noqa: S102
     except SyntaxError as exc:
         return _error_response(
             phase="parse",
@@ -550,6 +745,7 @@ def _do_trace(
         "input_dtype":   str(dummy.dtype).replace("torch.", ""),
         "trace_time_ms": round(t_ms, 2),
         "mismatches":    mismatches,    # list of { edge_id, message, severity }
+        "checks":        _build_checks_result(code, training_signals, recorded_losses),
     }
 
     if shape_error:

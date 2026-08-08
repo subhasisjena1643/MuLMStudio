@@ -36,6 +36,12 @@ export function useTracer(onGraph, onError, onLog) {
   const mountedRef = useRef(true);   // prevent state updates after unmount
   const [status, setStatus] = useState('connecting');
 
+  // Holds the most recent { code, inputShape } that sendCode tried to deliver
+  // while the socket wasn't OPEN. Flushed the instant the socket reconnects,
+  // so an edit made right after a drop (e.g. pasting fresh code) is never
+  // silently lost — see ws.onopen below.
+  const pendingSendRef = useRef(null);
+
   // ── stable refs so callbacks don't need to close over changing values ──────
   const onGraphRef = useRef(onGraph);
   const onErrorRef = useRef(onError);
@@ -75,6 +81,15 @@ export function useTracer(onGraph, onError, onLog) {
       connectingRef.current = false;
       setStatus('open');
       clearTimeout(reconnectRef.current);
+
+      // Flush any edit that couldn't be sent while we were reconnecting —
+      // otherwise that edit is gone for good until the next keystroke.
+      if (pendingSendRef.current) {
+        const payload = pendingSendRef.current;
+        pendingSendRef.current = null;
+        ws.send(JSON.stringify(payload));
+        onLogRef.current?.({ type: 'terminal', text: `→ SEND (resent after reconnect) ${JSON.stringify(payload).slice(0, 80)}…` });
+      }
     };
 
     ws.onmessage = (event) => {
@@ -96,6 +111,7 @@ export function useTracer(onGraph, onError, onLog) {
           errors: result.graph.errors ?? [],
           model_name: result.model_name,
           mismatches: result.mismatches ?? [],
+          checks: result.checks ?? null,
           trace_time_ms: result.trace_time_ms,
         };
         onLogRef.current?.({ type: 'terminal', text: `← RECV status:success nodes:${graph.nodes.length} edges:${graph.edges.length}` });
@@ -160,18 +176,29 @@ export function useTracer(onGraph, onError, onLog) {
   const sendCode = useCallback((code, inputShape = null) => {
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
+      const payload = { code };
+      if (inputShape) payload.input_shape = inputShape;
       const ws = wsRef.current;
       if (ws && ws.readyState === WebSocket.OPEN) {
-        const payload = { code };
-        if (inputShape) payload.input_shape = inputShape;
         ws.send(JSON.stringify(payload));
+        pendingSendRef.current = null;
         onLogRef.current?.({ type: 'terminal', text: `→ SEND ${JSON.stringify(payload).slice(0, 80)}…` });
+      } else {
+        // Socket isn't open right now (mid-reconnect) — remember this
+        // payload so ws.onopen can flush it the moment we're back, instead
+        // of losing the edit until the user happens to type again.
+        pendingSendRef.current = payload;
       }
-      // If socket is not open, the update is silently dropped —
-      // the reconnect loop will re-establish, and the next keystroke
-      // will trigger a new send.
     }, DEBOUNCE_MS);
   }, []);
 
-  return { sendCode, wsStatus: status };
+  // Cancel a pending debounced send outright — used when the notebook goes
+  // empty, so a leftover keystroke from mid-backspace never gets sent (and
+  // traced/errored) after the user has already moved on.
+  const cancelPending = useCallback(() => {
+    clearTimeout(debounceRef.current);
+    pendingSendRef.current = null;
+  }, []);
+
+  return { sendCode, cancelPending, wsStatus: status };
 }

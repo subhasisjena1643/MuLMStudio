@@ -13,7 +13,7 @@
 import { useState } from 'react';
 import { useClaude } from '../hooks/useClaude';
 
-const TABS = ['PROBLEMS', 'OUTPUT', 'DEBUG', 'TERMINAL'];
+const TABS = ['PROBLEMS', 'CHECKS', 'OUTPUT', 'DEBUG', 'TERMINAL'];
 
 export default function AnalysisPanel({ problems = [], outputLog = [], terminalLog = [], selectedNode = null }) {
   const [activeTab, setActiveTab] = useState('PROBLEMS');
@@ -45,10 +45,89 @@ export default function AnalysisPanel({ problems = [], outputLog = [], terminalL
               No problems detected
             </div>
           ) : (
-            problems.map((p, i) => (
-              <ProblemRow key={p.id ?? i} problem={p} />
-            ))
+            <>
+              <div style={{
+                fontSize: '9px',
+                color: 'var(--text-muted)',
+                padding: '4px 10px',
+                borderBottom: '1px solid var(--border-default)',
+                fontFamily: 'var(--font-mono)'
+              }}>
+                Errors are shown per-block. Downstream effects are not yet computed.
+              </div>
+              {problems.map((p, i) => (
+                <ProblemRow key={p.id ?? i} problem={p} />
+              ))}
+            </>
           )
+        )}
+        {activeTab === 'CHECKS' && (
+          <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {/* Status badges */}
+            <div style={{
+              display: 'flex', gap: '12px', paddingBottom: '8px',
+              borderBottom: '1px solid var(--border-default)',
+              fontSize: '11px', fontFamily: 'var(--font-mono)'
+            }}>
+              <span style={{ color: 'var(--text-muted)' }}>
+                Graph: <span style={{ color: '#3D7A56' }}>clean</span>
+              </span>
+              <span style={{ color: 'var(--text-muted)' }}>
+                Values: <span style={{ opacity: 0.4 }}>not yet checked</span>
+              </span>
+            </div>
+
+            {/* Check cards */}
+            {[
+              {
+                name: 'Overfit-one-batch',
+                status: 'off',
+                reason: 'Declare a loss and an optimizer to enable this check. µLM will not invent a training loop for you.'
+              },
+              {
+                name: 'Loss-at-init',
+                status: 'off',
+                reason: 'Requires a declared loss function and data sample.'
+              },
+              {
+                name: 'Reproducibility',
+                status: 'off',
+                reason: 'Requires a declared training step to seed and compare.'
+              }
+            ].map((check, i) => (
+              <div key={i} style={{
+                padding: '8px 10px',
+                background: 'rgba(255,255,255,0.02)',
+                border: '1px solid var(--border-default)',
+                borderRadius: '3px',
+                fontSize: '11px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                  <span style={{
+                    display: 'inline-block', width: '8px', height: '8px',
+                    borderRadius: '2px', background: '#555'
+                  }} />
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                    {check.name}
+                  </span>
+                  <span style={{ color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                    {check.status}
+                  </span>
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '10px', lineHeight: '1.4' }}>
+                  ■ {check.reason}
+                </div>
+              </div>
+            ))}
+
+            <div style={{
+              fontSize: '10px', color: 'var(--text-muted)',
+              fontStyle: 'italic', marginTop: '4px'
+            }}>
+              Value-level checks execute your real code — they are unaffected by
+              yellow (partially modeled) regions on the canvas.
+            </div>
+          </div>
         )}
         {activeTab === 'OUTPUT' && (
           outputLog.length === 0 ? (

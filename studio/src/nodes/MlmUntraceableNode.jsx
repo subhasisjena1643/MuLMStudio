@@ -57,6 +57,15 @@ export default function MlmUntraceableNode({ data, selected }) {
         }}>
           {data.degradation_reason || "graph break · data-dependent control flow"}
         </div>
+
+        <div style={{
+          fontSize: '8px',
+          color: 'rgba(184, 134, 11, 0.6)',
+          fontFamily: 'var(--font-mono)',
+          marginTop: '2px'
+        }}>
+          Upstream error — downstream effects not computed at MVP
+        </div>
       </div>
 
       <Handle type="target" position={Position.Top} style={{ borderColor: withAlpha('#B8860B', 0.6) }} />

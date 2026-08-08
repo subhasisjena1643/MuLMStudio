@@ -1,0 +1,20 @@
+# Never let secrets or local overrides into a build context / image layer.
+.env
+.env.local
+studio/.env.local
+
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+.git/
+.gitignore
+
+# Frontend has its own Dockerfile/.dockerignore — irrelevant to the
+# backend build context, and node_modules is large.
+studio/node_modules/
+studio/dist/
+
+*.md

@@ -1,0 +1,16 @@
+# µLM Studio — backend dependencies for the Docker image.
+#
+# torch/torchvision are installed separately in the Dockerfile from the
+# CPU-only wheel index (https://download.pytorch.org/whl/cpu) — this app
+# traces small dummy tensors for architecture visualization and runs a
+# handful of forward/backward steps for the Checks tab, never large-scale
+# training, so a GPU is never required and the CPU wheels keep the image
+# a fraction of the size of requirements.txt's CUDA build.
+
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+websockets==12.0
+httpx==0.28.1                # server-side proxy to the Anthropic API
+
+pydantic==2.7.1              # FastAPI's data validation layer
+python-dotenv==1.2.2          # loads .env for local dev (no-op in real deployments)

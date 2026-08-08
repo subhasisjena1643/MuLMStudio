@@ -1,0 +1,44 @@
+# µLM Studio — one-command local demo.
+#
+#   cp .env.example .env   # fill in ANTHROPIC_API_KEY
+#   docker compose up --build
+#   open http://localhost:8080
+#
+# This wires the backend and frontend together for a single machine (your
+# laptop, a demo box, etc.) — both containers run locally and the browser
+# reaches both over localhost ports mapped to the host.
+#
+# NOT for the "frontend and backend on different public hosts" case — there,
+# build the frontend image separately with
+# --build-arg VITE_BACKEND_URL=https://your-real-backend-url, since Vite
+# bakes that URL into the static JS at build time, and it has to be a URL
+# the *browser* can reach, not a Docker-internal service name.
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    env_file:
+      - .env
+    environment:
+      # The frontend container below is served on :8080 — add it so CORS
+      # allows the browser to call this backend from that origin.
+      - ALLOWED_ORIGINS=http://localhost:8080
+
+  frontend:
+    build:
+      context: ./studio
+      dockerfile: Dockerfile
+      args:
+        # Reachable from the *browser* on the host machine, not from inside
+        # the frontend container — hence localhost:8002 (mapped above), not
+        # a Docker Compose service name like http://backend:8002.
+        VITE_BACKEND_URL: http://localhost:8002
+        VITE_DEMO_MODE: "false"
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
